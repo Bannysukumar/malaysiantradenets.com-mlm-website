@@ -36,6 +36,8 @@ dist-ssr
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
 
 # Razorpay keys (sensitive)
 rzp-key*.csv
