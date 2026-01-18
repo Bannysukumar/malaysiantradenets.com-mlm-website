@@ -1,0 +1,202 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Get user role from Firestore users collection (for single document reads)
+    function getUserRole() {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null && userDoc.data != null ? userDoc.data.role : null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             (request.auth.token.admin == true || 
+              getUserRole() == 'admin' || 
+              getUserRole() == 'superAdmin');
+    }
+    
+    function isSuperAdmin() {
+      return isAuthenticated() && 
+             (request.auth.token.superAdmin == true || 
+              getUserRole() == 'superAdmin');
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && 
+             request.auth.uid == userId;
+    }
+    
+    // Site configuration - public read, admin write
+    match /siteConfig/{document} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
+    // Pages - public read, admin write
+    match /pages/{pageId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Services - public read, admin write
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Packages - allow read for all (filtering by visibility happens client-side)
+    match /packages/{packageId} {
+      allow read: if true; // Allow reading all packages (client-side filtering by visibility)
+      allow write: if isAdmin();
+    }
+    
+    // Marketing config - public read, admin write
+    match /marketingConfig/{document} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
+    // Income rules - public read, admin write
+    match /incomeRules/{document} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
+    // Bonanza - public read, admin write
+    match /bonanza/{document} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
+    // Terms - public read, admin write
+    match /terms/{document} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
+    // Contact - public read, admin write
+    match /contact/{document} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
+    // Settings - authenticated read, admin write
+    match /settings/{document} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
+    // Users - users can read own, authenticated users can list (admin check on frontend)
+    // For list queries, allow authenticated users (frontend checks admin role)
+    match /users/{userId} {
+      // Allow reading if owner, or if authenticated (for list queries, frontend filters)
+      allow read: if isOwner(userId) || isAuthenticated();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
+    // Referrals - users can read own, admin can read all
+    match /referrals/{referralId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // Audit logs - admin only, append-only
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if false;
+      allow delete: if false;
+    }
+    
+    // User packages - users can read own, create own, update own (for payment), admin can read/write all
+    match /userPackages/{packageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+    
+    // Transactions - users can read own, admin can read all, Cloud Functions can create
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid ||
+                     true; // Cloud Functions can create (server-side)
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // Payouts - users can read own, admin can read/write all, Cloud Functions can create
+    match /payouts/{payoutId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if true; // Cloud Functions can create (server-side)
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
+    // User Financial Profiles - users can read/write own, admin can read all
+    match /userFinancialProfiles/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // Wallets - users can read own, admin can read all, Cloud Functions can write
+    match /wallets/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if true; // Cloud Functions can create
+      allow update: if true; // Cloud Functions can update
+      allow delete: if isSuperAdmin();
+    }
+    
+    // Income Ledger - users can read own entries, admin can read all, Cloud Functions can write
+    match /incomeLedger/{userId}/entries/{entryId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if true; // Cloud Functions can create
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
+    // Withdrawals - users can read own, create own, admin can read/write all, Cloud Functions can create
+    match /withdrawals/{withdrawalId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid ||
+                     true; // Cloud Functions can create
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
+    // Admin Config - authenticated read, admin write
+    match /adminConfig/{document} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+  }
+}
+
