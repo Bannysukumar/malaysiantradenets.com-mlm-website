@@ -197,6 +197,29 @@ service cloud.firestore {
       allow update: if isAdmin();
       allow delete: if isSuperAdmin();
     }
+    
+    // Transfers - users can read own, create own, admin can read all, Cloud Functions can write
+    match /transfers/{transferId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.senderUid == request.auth.uid || 
+                      resource.data.recipientUid == request.auth.uid || 
+                      isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.senderUid == request.auth.uid ||
+                     true; // Cloud Functions can create
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
+    // Activations - users can read own (as sponsor), admin can read all, Cloud Functions can write
+    match /activations/{activationId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.sponsorUid == request.auth.uid || 
+                      resource.data.targetUid == request.auth.uid || 
+                      isAdmin());
+      allow create: if true; // Cloud Functions can create
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
   }
 }
 

@@ -30,6 +30,10 @@ import UserSupport from './pages/user/Support'
 import UserWallet from './pages/user/Wallet'
 import UserIncomeHistory from './pages/user/IncomeHistory'
 import UserWithdraw from './pages/user/Withdraw'
+import UserTransfer from './pages/user/Transfer'
+import UserTransferHistory from './pages/user/TransferHistory'
+import UserActivateUser from './pages/user/ActivateUser'
+import UserActivationHistory from './pages/user/ActivationHistory'
 
 // Admin
 import AdminLogin from './pages/admin/Login'
@@ -47,6 +51,9 @@ import AdminUsers from './pages/admin/Users'
 import AdminWallets from './pages/admin/Wallets'
 import AdminWithdrawals from './pages/admin/Withdrawals'
 import AdminWithdrawalSettings from './pages/admin/WithdrawalSettings'
+import AdminTransfers from './pages/admin/Transfers'
+import AdminActivations from './pages/admin/Activations'
+import AdminFeatureSettings from './pages/admin/FeatureSettings'
 import AdminSettings from './pages/admin/Settings'
 
 // Layouts
@@ -111,6 +118,10 @@ function AppRoutes() {
         <Route path="wallet" element={<UserWallet />} />
         <Route path="income-history" element={<UserIncomeHistory />} />
         <Route path="withdraw" element={<UserWithdraw />} />
+        <Route path="transfer" element={<UserTransfer />} />
+        <Route path="transfer-history" element={<UserTransferHistory />} />
+        <Route path="activate-user" element={<UserActivateUser />} />
+        <Route path="activation-history" element={<UserActivationHistory />} />
         <Route path="notifications" element={<UserNotifications />} />
         <Route path="support" element={<UserSupport />} />
       </Route>
@@ -132,6 +143,9 @@ function AppRoutes() {
         <Route path="wallets" element={<AdminWallets />} />
         <Route path="withdrawals" element={<AdminWithdrawals />} />
         <Route path="withdrawal-settings" element={<AdminWithdrawalSettings />} />
+        <Route path="transfers" element={<AdminTransfers />} />
+        <Route path="activations" element={<AdminActivations />} />
+        <Route path="feature-settings" element={<AdminFeatureSettings />} />
         <Route path="settings" element={<AdminSettings />} />
       </Route>
 

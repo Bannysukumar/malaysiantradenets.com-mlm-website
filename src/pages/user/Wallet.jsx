@@ -7,8 +7,12 @@ import { formatCurrency } from '../../utils/helpers'
 import { Link } from 'react-router-dom'
 
 export default function UserWallet() {
-  const { userData } = useAuth()
-  const { data: walletData } = useFirestore(doc(db, 'wallets', userData?.uid || ''))
+  const { user, userData } = useAuth()
+  const userId = user?.uid || userData?.uid
+  
+  // Only create document reference if userId exists
+  const walletRef = userId ? doc(db, 'wallets', userId) : null
+  const { data: walletData } = useFirestore(walletRef)
 
   const wallet = walletData || {
     availableBalance: userData?.walletBalance || 0,

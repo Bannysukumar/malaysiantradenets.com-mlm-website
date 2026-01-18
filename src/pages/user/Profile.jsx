@@ -19,7 +19,9 @@ export default function UserProfile() {
     city: ''
   })
 
-  const { data: financialProfile, loading: profileLoading } = useFirestore(doc(db, 'userFinancialProfiles', user?.uid || ''))
+  const userId = user?.uid
+  const financialProfileRef = userId ? doc(db, 'userFinancialProfiles', userId) : null
+  const { data: financialProfile, loading: profileLoading } = useFirestore(financialProfileRef)
 
   const personalForm = useForm({
     defaultValues: {

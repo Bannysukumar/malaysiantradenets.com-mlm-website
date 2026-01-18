@@ -13,8 +13,10 @@ import { functions } from '../../config/firebase'
 
 export default function UserWithdraw() {
   const { user, userData } = useAuth()
+  const userId = user?.uid
   const { data: withdrawalConfig } = useFirestore(doc(db, 'adminConfig', 'withdrawals'))
-  const { data: financialProfile } = useFirestore(doc(db, 'userFinancialProfiles', user?.uid || ''))
+  const financialProfileRef = userId ? doc(db, 'userFinancialProfiles', userId) : null
+  const { data: financialProfile } = useFirestore(financialProfileRef)
   const [checking, setChecking] = useState(false)
   
   const config = withdrawalConfig || {

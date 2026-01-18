@@ -36,6 +36,9 @@ export default function AdminLayout() {
     { path: '/admin/users', icon: Users, label: 'Users' },
     { path: '/admin/wallets', icon: Wallet, label: 'Wallets' },
     { path: '/admin/withdrawals', icon: ArrowUpCircle, label: 'Withdrawals' },
+    { path: '/admin/transfers', icon: DollarSign, label: 'Transfers' },
+    { path: '/admin/activations', icon: Users, label: 'Activations' },
+    { path: '/admin/feature-settings', icon: Settings, label: 'Feature Settings' },
     { path: '/admin/settings', icon: Settings, label: 'Settings' },
   ]
 

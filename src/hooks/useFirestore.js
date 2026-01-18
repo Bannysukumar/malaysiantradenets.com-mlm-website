@@ -9,7 +9,9 @@ export function useFirestore(ref, options = {}) {
 
   useEffect(() => {
     if (!ref) {
+      setData(null)
       setLoading(false)
+      setError(null)
       return
     }
 
