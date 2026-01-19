@@ -5,7 +5,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
 import { Settings, DollarSign, AlertCircle, CheckCircle, Shield, Plus, X } from 'lucide-react'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 
 export default function AdminReferralIncomeSettings() {
   const { data: referralConfig, loading } = useFirestore(doc(db, 'adminConfig', 'referralIncome'))
@@ -16,9 +16,25 @@ export default function AdminReferralIncomeSettings() {
       enableInvestorReferralIncome: true,
       enableLeaderReferralIncome: false, // Locked OFF
       directReferralPercent: 5.0,
-      enableMultiLevelIncome: false,
+      enableMultiLevelIncome: true,
       maxLevels: 25,
-      levelReferralPercents: [],
+      levelReferralPercents: [
+        { levelFrom: 1, levelTo: 1, percent: 15 },
+        { levelFrom: 2, levelTo: 2, percent: 10 },
+        { levelFrom: 3, levelTo: 3, percent: 8 },
+        { levelFrom: 4, levelTo: 4, percent: 10 },
+        { levelFrom: 5, levelTo: 5, percent: 6 },
+        { levelFrom: 6, levelTo: 7, percent: 5 },
+        { levelFrom: 8, levelTo: 9, percent: 4 },
+        { levelFrom: 10, levelTo: 10, percent: 3 },
+        { levelFrom: 11, levelTo: 25, percent: 2 }
+      ],
+      enableQualificationRules: true,
+      qualificationRules: {
+        level1to3: { minDirects: 5 },
+        level4to13: { directsPerLevel: 2 }, // 1 direct for every 2 levels
+        level14to25: { directsPerLevel: 3 } // 1 direct for every 3 levels
+      },
       referralIncomeCountsTowardCap: true,
       referralIncomeEligibleStatuses: ['ACTIVE_INVESTOR'], // Only on activation
       referralIncomePayoutMode: 'INSTANT_TO_WALLET',
@@ -32,9 +48,13 @@ export default function AdminReferralIncomeSettings() {
     }
   })
 
+  const hasInitialized = useRef(false)
+  
   useEffect(() => {
-    if (referralConfig) {
+    // Only reset form on initial load, not on subsequent updates
+    if (referralConfig && !hasInitialized.current) {
       reset(referralConfig)
+      hasInitialized.current = true
     }
   }, [referralConfig, reset])
 
@@ -51,6 +71,18 @@ export default function AdminReferralIncomeSettings() {
             }))
         : [];
 
+      // Calculate total percentage
+      const totalPercent = levelPercentages.reduce((sum, lp) => {
+        const levelCount = lp.levelTo - lp.levelFrom + 1
+        return sum + (lp.percent * levelCount)
+      }, 0)
+
+      // Validate total percentage (should be 100%)
+      if (Math.abs(totalPercent - 100) > 0.01) {
+        toast.error(`Total level income must equal 100%. Current total: ${totalPercent.toFixed(2)}%`)
+        return
+      }
+
       await setDoc(doc(db, 'adminConfig', 'referralIncome'), {
         enableReferralIncomeGlobal: data.enableReferralIncomeGlobal === true || data.enableReferralIncomeGlobal === 'true',
         enableInvestorReferralIncome: data.enableInvestorReferralIncome === true || data.enableInvestorReferralIncome === 'true',
@@ -59,6 +91,12 @@ export default function AdminReferralIncomeSettings() {
         enableMultiLevelIncome: data.enableMultiLevelIncome === true || data.enableMultiLevelIncome === 'true',
         maxLevels: parseInt(data.maxLevels) || 25,
         levelReferralPercents: levelPercentages,
+        enableQualificationRules: data.enableQualificationRules === true || data.enableQualificationRules === 'true',
+        qualificationRules: {
+          level1to3: { minDirects: parseInt(data.qualificationRules?.level1to3?.minDirects) || 5 },
+          level4to13: { directsPerLevel: parseInt(data.qualificationRules?.level4to13?.directsPerLevel) || 2 },
+          level14to25: { directsPerLevel: parseInt(data.qualificationRules?.level14to25?.directsPerLevel) || 3 }
+        },
         referralIncomeCountsTowardCap: data.referralIncomeCountsTowardCap === true || data.referralIncomeCountsTowardCap === 'true',
         referralIncomeEligibleStatuses: data.referralIncomeEligibleStatuses || ['ACTIVE_INVESTOR'],
         referralIncomePayoutMode: data.referralIncomePayoutMode || 'INSTANT_TO_WALLET',
@@ -258,7 +296,7 @@ export default function AdminReferralIncomeSettings() {
                 <div>
                   <div className="font-semibold">Enable Multi-Level Income</div>
                   <div className="text-sm text-gray-400">
-                    Distribute referral income to multiple levels in the upline chain (Level 2, 3, 4, etc.)
+                    Distribute referral income to multiple levels in the upline chain (Level 1-25)
                   </div>
                 </div>
               </label>
@@ -284,15 +322,70 @@ export default function AdminReferralIncomeSettings() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium mb-2">Level Percentages</label>
+                    <label className="block text-sm font-medium mb-2">Level Percentages (On ROI - Investor)</label>
                     <p className="text-xs text-gray-400 mb-3">
-                      Configure percentage for each level range. Example: Levels 2-5 get 3%, Levels 6-10 get 2%, etc.
+                      Configure percentage for each level. <strong>Total must equal 100%</strong>
                     </p>
                     <LevelPercentagesEditor 
                       register={register}
                       watch={watch}
                       setValue={setValue}
                     />
+                  </div>
+
+                  {/* Qualification Rules */}
+                  <div className="mt-6">
+                    <label className="flex items-center gap-3 cursor-pointer mb-4">
+                      <input
+                        type="checkbox"
+                        {...register('enableQualificationRules')}
+                        className="w-5 h-5"
+                      />
+                      <div>
+                        <div className="font-semibold">Enable Qualification Rules</div>
+                        <div className="text-sm text-gray-400">
+                          Require minimum direct referrals to qualify for level income
+                        </div>
+                      </div>
+                    </label>
+
+                    {watch('enableQualificationRules') && (
+                      <div className="bg-blue-500/20 border border-blue-500 rounded-lg p-4 space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Level 1-3: Minimum Directs</label>
+                          <input
+                            type="number"
+                            min="0"
+                            {...register('qualificationRules.level1to3.minDirects')}
+                            className="input-field"
+                            defaultValue="5"
+                          />
+                          <p className="text-xs text-gray-400 mt-1">Requires 5 direct referrals for levels 1-3</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Level 4-13: Directs Per Level Ratio</label>
+                          <input
+                            type="number"
+                            min="1"
+                            {...register('qualificationRules.level4to13.directsPerLevel')}
+                            className="input-field"
+                            defaultValue="2"
+                          />
+                          <p className="text-xs text-gray-400 mt-1">1 Direct for every 2 Levels (e.g., Level 4 = 2 directs, Level 6 = 3 directs)</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Level 14-25: Directs Per Level Ratio</label>
+                          <input
+                            type="number"
+                            min="1"
+                            {...register('qualificationRules.level14to25.directsPerLevel')}
+                            className="input-field"
+                            defaultValue="3"
+                          />
+                          <p className="text-xs text-gray-400 mt-1">1 Direct for every 3 Levels (e.g., Level 14 = 5 directs, Level 16 = 6 directs)</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -672,23 +765,153 @@ function SyncWalletBalancesButton() {
   )
 }
 
+// Total Percentage Display Component (for use with watch)
+function TotalPercentageDisplay({ watch }) {
+  const levelPercentages = watch('levelReferralPercents') || []
+  const totalPercent = levelPercentages.reduce((sum, lp) => {
+    const levelCount = lp.levelTo - lp.levelFrom + 1
+    return sum + (lp.percent * levelCount)
+  }, 0)
+  const isValid = Math.abs(totalPercent - 100) < 0.01
+
+  return (
+    <div className={`mt-3 p-3 rounded-lg border ${isValid ? 'bg-green-500/20 border-green-500' : 'bg-red-500/20 border-red-500'}`}>
+      <div className="flex items-center gap-2">
+        <span className={`font-semibold ${isValid ? 'text-green-400' : 'text-red-400'}`}>
+          Total Level Income: {totalPercent.toFixed(2)}%
+        </span>
+        {isValid ? (
+          <CheckCircle className="text-green-400" size={16} />
+        ) : (
+          <AlertCircle className="text-red-400" size={16} />
+        )}
+      </div>
+      <p className={`text-xs mt-1 ${isValid ? 'text-green-300' : 'text-red-300'}`}>
+        {isValid 
+          ? '✓ Total equals 100% - Valid configuration'
+          : '✗ Total must equal 100% - Please adjust percentages'
+        }
+      </p>
+    </div>
+  )
+}
+
+// Total Percentage Display Component (for use with direct prop)
+function TotalPercentageDisplayInline({ levelPercentages }) {
+  const totalPercent = (levelPercentages || []).reduce((sum, lp) => {
+    const levelCount = lp.levelTo - lp.levelFrom + 1
+    return sum + (lp.percent * levelCount)
+  }, 0)
+  const isValid = Math.abs(totalPercent - 100) < 0.01
+
+  return (
+    <div className={`mt-3 p-3 rounded-lg border ${isValid ? 'bg-green-500/20 border-green-500' : 'bg-red-500/20 border-red-500'}`}>
+      <div className="flex items-center gap-2">
+        <span className={`font-semibold ${isValid ? 'text-green-400' : 'text-red-400'}`}>
+          Total Level Income: {totalPercent.toFixed(2)}%
+        </span>
+        {isValid ? (
+          <CheckCircle className="text-green-400" size={16} />
+        ) : (
+          <AlertCircle className="text-red-400" size={16} />
+        )}
+      </div>
+      <p className={`text-xs mt-1 ${isValid ? 'text-green-300' : 'text-red-300'}`}>
+        {isValid 
+          ? '✓ Total equals 100% - Valid configuration'
+          : '✗ Total must equal 100% - Please adjust percentages'
+        }
+      </p>
+    </div>
+  )
+}
+
 // Level Percentages Editor Component
 function LevelPercentagesEditor({ register, watch, setValue }) {
   const levelPercentages = watch('levelReferralPercents') || []
-  const [localLevels, setLocalLevels] = useState(levelPercentages.length > 0 ? levelPercentages : [
-    { levelFrom: 2, levelTo: 5, percent: 3 },
-    { levelFrom: 6, levelTo: 10, percent: 2 },
-    { levelFrom: 11, levelTo: 15, percent: 1 }
-  ])
+  const defaultLevels = [
+    { levelFrom: 1, levelTo: 1, percent: 15 },
+    { levelFrom: 2, levelTo: 2, percent: 10 },
+    { levelFrom: 3, levelTo: 3, percent: 8 },
+    { levelFrom: 4, levelTo: 4, percent: 10 },
+    { levelFrom: 5, levelTo: 5, percent: 6 },
+    { levelFrom: 6, levelTo: 7, percent: 5 },
+    { levelFrom: 8, levelTo: 9, percent: 4 },
+    { levelFrom: 10, levelTo: 10, percent: 3 },
+    { levelFrom: 11, levelTo: 25, percent: 2 }
+  ]
+  
+  // Initialize local state - only use form values if they exist and are valid
+  const [localLevels, setLocalLevels] = useState(() => {
+    if (levelPercentages.length > 0 && Array.isArray(levelPercentages)) {
+      // Validate that form values are valid level objects
+      const isValid = levelPercentages.every(lp => 
+        lp && typeof lp.levelFrom === 'number' && typeof lp.levelTo === 'number' && typeof lp.percent === 'number'
+      )
+      if (isValid) {
+        return levelPercentages
+      }
+    }
+    return defaultLevels
+  })
+  
+  const isInitialized = useRef(false)
+  const isUpdatingFromForm = useRef(false)
+  const isUpdatingFromLocal = useRef(false)
+  const userHasModified = useRef(false) // Track if user has made any changes
+  const initialFormValueRef = useRef(JSON.stringify(levelPercentages))
 
+  // Sync local state when form values change (e.g., from Firestore) - only on initial load
   useEffect(() => {
-    // Sync with form
-    setValue('levelReferralPercents', localLevels)
+    // Only sync from form to local on initial load (when form has data and we haven't initialized yet)
+    // AND only if user hasn't made any modifications
+    if (!isInitialized.current && levelPercentages.length > 0 && !isUpdatingFromLocal.current && !userHasModified.current) {
+      const formStr = JSON.stringify(levelPercentages)
+      const localStr = JSON.stringify(localLevels)
+      
+      // Validate form values are valid
+      const isValid = levelPercentages.every(lp => 
+        lp && typeof lp.levelFrom === 'number' && typeof lp.levelTo === 'number' && typeof lp.percent === 'number'
+      )
+      
+      // Only update if form values are different from local state
+      if (isValid && formStr !== localStr && formStr !== initialFormValueRef.current) {
+        isUpdatingFromForm.current = true
+        setLocalLevels(levelPercentages)
+        initialFormValueRef.current = formStr
+        isInitialized.current = true
+        isUpdatingFromForm.current = false
+      } else if (isValid && formStr === localStr) {
+        // Form values match local state, just mark as initialized
+        isInitialized.current = true
+        initialFormValueRef.current = formStr
+      }
+    } else if (!isInitialized.current && levelPercentages.length === 0) {
+      // If form is empty, mark as initialized with defaults
+      isInitialized.current = true
+      initialFormValueRef.current = JSON.stringify(defaultLevels)
+    }
+    // If already initialized and user has modified, ignore form changes (prevent reset from overwriting)
+  }, [levelPercentages, localLevels])
+
+  // Sync local state changes to form
+  useEffect(() => {
+    // Only sync with form if we're initialized and the change came from local state (user interaction)
+    if (isInitialized.current && !isUpdatingFromForm.current) {
+      isUpdatingFromLocal.current = true
+      userHasModified.current = true // Mark that user has made changes
+      setValue('levelReferralPercents', localLevels, { shouldDirty: true, shouldValidate: false })
+      initialFormValueRef.current = JSON.stringify(localLevels)
+      // Reset flag after a short delay to allow form to update
+      setTimeout(() => {
+        isUpdatingFromLocal.current = false
+      }, 100)
+    }
   }, [localLevels, setValue])
 
   const addLevel = () => {
     const lastLevel = localLevels[localLevels.length - 1]
-    const newLevelFrom = lastLevel ? lastLevel.levelTo + 1 : 2
+    const newLevelFrom = lastLevel ? lastLevel.levelTo + 1 : 1
     setLocalLevels([...localLevels, { levelFrom: newLevelFrom, levelTo: newLevelFrom + 3, percent: 1 }])
   }
 
@@ -705,13 +928,13 @@ function LevelPercentagesEditor({ register, watch, setValue }) {
   return (
     <div className="space-y-3">
       {localLevels.map((level, index) => (
-        <div key={index} className="flex items-center gap-2 p-3 bg-dark-lighter rounded-lg">
+        <div key={`level-${level.levelFrom}-${level.levelTo}-${index}`} className="flex items-center gap-2 p-3 bg-dark-lighter rounded-lg">
           <div className="flex-1 grid grid-cols-3 gap-2">
             <div>
               <label className="block text-xs text-gray-400 mb-1">From Level</label>
               <input
                 type="number"
-                min="2"
+                min="1"
                 value={level.levelFrom || ''}
                 onChange={(e) => updateLevel(index, 'levelFrom', parseInt(e.target.value) || 0)}
                 className="input-field text-sm"
@@ -721,7 +944,7 @@ function LevelPercentagesEditor({ register, watch, setValue }) {
               <label className="block text-xs text-gray-400 mb-1">To Level</label>
               <input
                 type="number"
-                min="2"
+                min="1"
                 value={level.levelTo || ''}
                 onChange={(e) => updateLevel(index, 'levelTo', parseInt(e.target.value) || 0)}
                 className="input-field text-sm"
@@ -758,8 +981,11 @@ function LevelPercentagesEditor({ register, watch, setValue }) {
         Add Level Range
       </button>
       <p className="text-xs text-gray-400">
-        Example: Levels 2-5 at 3% means users at levels 2, 3, 4, and 5 will receive 3% of activation amount
+        Example: Levels 6-7 at 5% means users at levels 6 and 7 will receive 5% of activation amount.
+        <br />
+        <strong>Important:</strong> Total level income must equal 100% (Level 1-25 combined)
       </p>
+      <TotalPercentageDisplayInline levelPercentages={localLevels} />
     </div>
   )
 }

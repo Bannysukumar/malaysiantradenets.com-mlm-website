@@ -11,13 +11,14 @@ export default function AdminIncomeRules() {
     defaultValues: incomeRules || {
       withSecurity: {
         minPackageInr: 50000,
-        dailyPercent: 2,
-        maxWorkingDays: 60,
-        note: 'After 60 working days, you will receive 120% return and land return.',
+        dailyPercent: 0.5,
+        maxWorkingDays: 421,
+        note: 'With Security: 0.5% daily, up to 421 working days (Monday to Friday)',
       },
       withoutSecurity: {
-        dailyPercent: 1.5,
-        maxWorkingDays: 60,
+        dailyPercent: 1.0,
+        maxWorkingDays: 221,
+        note: 'Without Security: 1% daily, up to 221 working days (Monday to Friday)',
       },
     },
   })

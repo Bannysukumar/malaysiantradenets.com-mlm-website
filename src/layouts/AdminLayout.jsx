@@ -19,7 +19,8 @@ import {
   RefreshCw,
   Clock,
   Target,
-  UserCog
+  UserCog,
+  Calendar
 } from 'lucide-react'
 
 export default function AdminLayout() {
@@ -48,6 +49,7 @@ export default function AdminLayout() {
     { path: '/admin/activation-rules', icon: Clock, label: 'Activation Rules' },
     { path: '/admin/referral-income-settings', icon: UserCog, label: 'Referral Income Settings' },
     { path: '/admin/referral-income', icon: DollarSign, label: 'Referral Income Report' },
+    { path: '/admin/payout-settings', icon: Calendar, label: 'Payout Settings' },
     { path: '/admin/feature-settings', icon: Settings, label: 'Feature Settings' },
     { path: '/admin/settings', icon: Settings, label: 'Settings' },
   ]

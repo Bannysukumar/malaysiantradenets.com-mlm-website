@@ -934,6 +934,38 @@ async function distributeReferralIncomeForActivation(userId, packageId, activati
           continue;
         }
         
+        // Qualification Rules Check
+        if (referralConfig.enableQualificationRules) {
+          const qualificationRules = referralConfig.qualificationRules || {};
+          const uplineDirectCount = uplineData.directReferrals || 0;
+          let qualified = false;
+          
+          if (level >= 1 && level <= 3) {
+            const minDirects = qualificationRules.level1to3?.minDirects || 5;
+            qualified = uplineDirectCount >= minDirects;
+            if (!qualified) {
+              console.log(`Upline ${uplineUid} at level ${level} does not meet qualification (has ${uplineDirectCount} directs, needs ${minDirects})`);
+              continue;
+            }
+          } else if (level >= 4 && level <= 13) {
+            const ratio = qualificationRules.level4to13?.directsPerLevel || 2;
+            const requiredDirects = Math.ceil(level / ratio);
+            qualified = uplineDirectCount >= requiredDirects;
+            if (!qualified) {
+              console.log(`Upline ${uplineUid} at level ${level} does not meet qualification (has ${uplineDirectCount} directs, needs ${requiredDirects})`);
+              continue;
+            }
+          } else if (level >= 14 && level <= 25) {
+            const ratio = qualificationRules.level14to25?.directsPerLevel || 3;
+            const requiredDirects = Math.ceil(level / ratio);
+            qualified = uplineDirectCount >= requiredDirects;
+            if (!qualified) {
+              console.log(`Upline ${uplineUid} at level ${level} does not meet qualification (has ${uplineDirectCount} directs, needs ${requiredDirects})`);
+              continue;
+            }
+          }
+        }
+        
         // Calculate level income
         const levelAmount = (activationAmount * levelPercent) / 100;
         
@@ -1135,60 +1167,146 @@ exports.processWeeklyPayouts = functions.pubsub.schedule('0 9 * * 1')
     console.log('Starting weekly payout processing...');
     
     try {
-      const termsConfig = await getTermsConfig();
-      const adminChargesPercent = termsConfig.adminChargesPercent || 10;
+      // Get payout config
+      const payoutConfigDoc = await db.collection('adminConfig').doc('payouts').get();
+      const payoutConfig = payoutConfigDoc.exists ? payoutConfigDoc.data() : {
+        enableWeeklyPayouts: true,
+        enforceCutoff: true,
+        cutoffDay: 'FRIDAY',
+        payoutReleaseDay: 'MONDAY',
+        adminChargesPercent: 10.0,
+        adminChargesApplyTo: ['daily_roi', 'REFERRAL_DIRECT', 'REFERRAL_LEVEL', 'level_income', 'bonus']
+      };
       
-      // Get all users with wallet balance > 0
-      const usersSnapshot = await db.collection('users')
-        .where('walletBalance', '>', 0)
+      // Check if weekly payouts are enabled
+      if (!payoutConfig.enableWeeklyPayouts) {
+        console.log('Weekly payouts are disabled');
+        return null;
+      }
+      
+      // Check cutoff enforcement
+      if (payoutConfig.enforceCutoff) {
+        const today = new Date();
+        const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        const cutoffDay = payoutConfig.cutoffDay || 'FRIDAY';
+        const payoutReleaseDay = payoutConfig.payoutReleaseDay || 'MONDAY';
+        
+        // Map day names to day numbers
+        const dayMap = {
+          'SUNDAY': 0,
+          'MONDAY': 1,
+          'TUESDAY': 2,
+          'WEDNESDAY': 3,
+          'THURSDAY': 4,
+          'FRIDAY': 5,
+          'SATURDAY': 6
+        };
+        
+        const cutoffDayNum = dayMap[cutoffDay] ?? 5; // Default to Friday
+        const releaseDayNum = dayMap[payoutReleaseDay] ?? 1; // Default to Monday
+        
+        // Check if today is the release day
+        if (dayOfWeek !== releaseDayNum) {
+          console.log(`Today is not ${payoutReleaseDay}. Payout processing only runs on ${payoutReleaseDay}.`);
+          return null;
+        }
+        
+        // Calculate last cutoff day
+        let daysSinceCutoff = (dayOfWeek - cutoffDayNum + 7) % 7;
+        if (daysSinceCutoff === 0) {
+          daysSinceCutoff = 7; // If same day, it's been 7 days
+        }
+        
+        // Verify last cutoff has passed (should be at least 3 days ago for Friday->Monday)
+        if (daysSinceCutoff < 3) {
+          console.log(`Last ${cutoffDay} cutoff has not passed yet. Days since cutoff: ${daysSinceCutoff}`);
+          return null;
+        }
+        
+        console.log(`Cutoff check passed. Last ${cutoffDay} was ${daysSinceCutoff} days ago.`);
+      }
+      
+      // Get admin charges from payout config (preferred) or terms config (fallback)
+      const adminChargesPercent = payoutConfig.adminChargesPercent || (await getTermsConfig()).adminChargesPercent || 10;
+      
+      // Get all wallets with available balance > 0
+      const walletsSnapshot = await db.collection('wallets')
+        .where('availableBalance', '>', 0)
         .get();
       
-      if (usersSnapshot.empty) {
-        console.log('No users with wallet balance found.');
+      if (walletsSnapshot.empty) {
+        console.log('No wallets with available balance found.');
         return null;
       }
       
       let processedCount = 0;
       let totalPayouts = 0;
       
-      for (const userDoc of usersSnapshot.docs) {
-        const userData = userDoc.data();
-        const walletBalance = userData.walletBalance || 0;
+      for (const walletDoc of walletsSnapshot.docs) {
+        const walletData = walletDoc.data();
+        const userId = walletDoc.id;
+        const walletBalance = walletData.availableBalance || 0;
         
-        if (walletBalance <= 0) continue;
+        // Check minimum payout amount
+        const minPayoutAmount = payoutConfig.minPayoutAmount || 0;
+        if (minPayoutAmount > 0 && walletBalance < minPayoutAmount) {
+          console.log(`User ${userId} wallet balance ${walletBalance} is below minimum payout ${minPayoutAmount}`);
+          continue;
+        }
+        
+        // Check maximum payout amount
+        const maxPayoutAmount = payoutConfig.maxPayoutAmount || 0;
+        const effectiveBalance = maxPayoutAmount > 0 && walletBalance > maxPayoutAmount 
+          ? maxPayoutAmount 
+          : walletBalance;
+        
+        if (effectiveBalance <= 0) continue;
         
         // Calculate admin charges
-        const adminCharges = (walletBalance * adminChargesPercent) / 100;
-        const payoutAmount = walletBalance - adminCharges;
+        const adminCharges = (effectiveBalance * adminChargesPercent) / 100;
+        const payoutAmount = effectiveBalance - adminCharges;
         
         // Create payout record
         const payoutId = `payout_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         await db.collection('payouts').doc(payoutId).set({
-          userId: userDoc.id,
+          userId: userId,
           walletBalanceBefore: walletBalance,
+          effectiveBalance: effectiveBalance,
           payoutAmount: payoutAmount,
           adminCharges: adminCharges,
           adminChargesPercent: adminChargesPercent,
-          status: 'pending', // Admin needs to process manually
+          status: payoutConfig.autoProcessPayouts ? 'approved' : 'pending', // Auto-process if enabled
           requestedAt: admin.firestore.FieldValue.serverTimestamp(),
-          week: context.timestamp
+          week: context.timestamp,
+          cutoffDay: payoutConfig.cutoffDay || 'FRIDAY',
+          payoutReleaseDay: payoutConfig.payoutReleaseDay || 'MONDAY'
         });
         
-        // Reset wallet balance (amount moved to pending payout)
-        await userDoc.ref.update({
-          walletBalance: 0,
-          pendingPayout: payoutAmount,
+        // Update wallet balance (deduct effective balance)
+        await walletDoc.ref.update({
+          availableBalance: admin.firestore.FieldValue.increment(-effectiveBalance),
+          pendingBalance: admin.firestore.FieldValue.increment(payoutAmount),
           lastPayoutRequest: admin.firestore.FieldValue.serverTimestamp()
         });
+        
+        // Also update users collection for backward compatibility
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (userDoc.exists) {
+          await userDoc.ref.update({
+            walletBalance: admin.firestore.FieldValue.increment(-effectiveBalance),
+            pendingPayout: admin.firestore.FieldValue.increment(payoutAmount),
+            lastPayoutRequest: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
         
         // Create transaction record
         const transactionId = `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         await db.collection('transactions').doc(transactionId).set({
-          userId: userDoc.id,
-          amount: -walletBalance,
+          userId: userId,
+          amount: -effectiveBalance,
           type: 'payout_request',
           description: `Weekly payout request (Admin charges: ${adminChargesPercent}%)`,
-          status: 'pending',
+          status: payoutConfig.autoProcessPayouts ? 'approved' : 'pending',
           payoutId: payoutId,
           adminCharges: adminCharges,
           payoutAmount: payoutAmount,

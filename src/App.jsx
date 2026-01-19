@@ -65,6 +65,7 @@ import AdminProgramSettings from './pages/admin/ProgramSettings'
 import AdminActivationRules from './pages/admin/ActivationRules'
 import AdminReferralIncomeSettings from './pages/admin/ReferralIncomeSettings'
 import AdminReferralIncomeReport from './pages/admin/ReferralIncomeReport'
+import AdminPayoutSettings from './pages/admin/PayoutSettings'
 
 // Layouts
 import PublicLayout from './layouts/PublicLayout'
@@ -141,6 +142,7 @@ function AppRoutes() {
         <Route path="activation-rules" element={<AdminActivationRules />} />
         <Route path="referral-income-settings" element={<AdminReferralIncomeSettings />} />
         <Route path="referral-income" element={<AdminReferralIncomeReport />} />
+        <Route path="payout-settings" element={<AdminPayoutSettings />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
