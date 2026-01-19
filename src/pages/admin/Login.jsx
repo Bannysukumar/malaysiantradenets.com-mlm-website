@@ -6,23 +6,41 @@ import toast from 'react-hot-toast'
 import { Shield } from 'lucide-react'
 
 export default function AdminLogin() {
-  const { signIn, user, isAdmin } = useAuth()
+  const { signIn, user, isAdmin, loading, userData } = useAuth()
   const navigate = useNavigate()
   const { register, handleSubmit } = useForm()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [loginAttempted, setLoginAttempted] = useState(false)
 
+  // Redirect if already logged in as admin
   useEffect(() => {
-    if (user && isAdmin) {
-      navigate('/admin/dashboard')
+    if (!loading && user && isAdmin) {
+      setIsSubmitting(false)
+      setLoginAttempted(false)
+      navigate('/admin/dashboard', { replace: true })
+    } else if (!loading && user && userData && !isAdmin && loginAttempted) {
+      // If user just logged in but is not admin, show error and redirect
+      toast.error('Access denied. Admin privileges required.')
+      setIsSubmitting(false)
+      setLoginAttempted(false)
+      setTimeout(() => {
+        navigate('/app/dashboard', { replace: true })
+      }, 2000)
     }
-  }, [user, isAdmin, navigate])
+  }, [user, isAdmin, loading, navigate, loginAttempted, userData])
 
   const onSubmit = async (data) => {
+    setIsSubmitting(true)
+    setLoginAttempted(true)
     try {
       await signIn(data.email, data.password)
-      // Check if user is admin (will be handled by protected route)
-      navigate('/admin/dashboard')
+      // Wait a moment for userData to load, then check admin status
+      // The useEffect will handle navigation once userData is loaded
     } catch (error) {
-      toast.error('Invalid credentials or insufficient permissions')
+      console.error('Login error:', error)
+      toast.error(error.message || 'Invalid credentials or insufficient permissions')
+      setIsSubmitting(false)
+      setLoginAttempted(false)
     }
   }
 
@@ -56,8 +74,12 @@ export default function AdminLogin() {
               />
             </div>
 
-            <button type="submit" className="w-full btn-primary">
-              Sign In
+            <button 
+              type="submit" 
+              className="w-full btn-primary"
+              disabled={isSubmitting || loading}
+            >
+              {isSubmitting ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
         </div>
