@@ -16,7 +16,8 @@ import {
   ArrowUpCircle,
   Send,
   History,
-  UserPlus
+  UserPlus,
+  RefreshCw
 } from 'lucide-react'
 
 export default function UserLayout() {
@@ -36,6 +37,7 @@ export default function UserLayout() {
     { path: '/app/transfer-history', icon: History, label: 'Transfer History', requiresFeature: 'enableUserTransfers' },
     { path: '/app/activate-user', icon: UserPlus, label: 'Activate User', requiresFeature: 'enableSponsorActivation' },
     { path: '/app/activation-history', icon: History, label: 'Activation History', requiresFeature: 'enableSponsorActivation' },
+    { path: '/app/renewal', icon: RefreshCw, label: 'Renew ID' },
     { path: '/app/profile', icon: User, label: 'Profile' },
     { path: '/app/notifications', icon: Bell, label: 'Notifications' },
     { path: '/app/support', icon: HelpCircle, label: 'Support' },

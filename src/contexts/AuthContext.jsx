@@ -36,7 +36,21 @@ export function AuthProvider({ children }) {
         // Fetch user data from Firestore
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
         if (userDoc.exists()) {
-          setUserData(userDoc.data())
+          const userDataFromFirestore = userDoc.data()
+          
+          // Also check if bank details exist in userFinancialProfiles
+          const financialProfileDoc = await getDoc(doc(db, 'userFinancialProfiles', firebaseUser.uid))
+          if (financialProfileDoc.exists() && financialProfileDoc.data().bank?.holderName) {
+            // If bank details exist but flag is not set, update it
+            if (!userDataFromFirestore.bankDetailsCompleted) {
+              await updateDoc(doc(db, 'users', firebaseUser.uid), {
+                bankDetailsCompleted: true
+              })
+              userDataFromFirestore.bankDetailsCompleted = true
+            }
+          }
+          
+          setUserData(userDataFromFirestore)
         } else {
           // Create user document if it doesn't exist
           const refCode = generateRefCode()
@@ -70,23 +84,26 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const signUp = async (email, password, name, phone, refCode) => {
+  const signUp = async (email, password, name, phone, refCode = null) => {
     try {
-      if (!refCode || refCode.trim().length < 4) {
-        throw new Error('Valid referral code is required')
-      }
-
-      // Validate referral code exists and is active
-      const usersSnapshot = await getDocs(query(collection(db, 'users'), where('refCode', '==', refCode.toUpperCase().trim())))
-      if (usersSnapshot.empty) {
-        throw new Error('Referral code not found')
-      }
+      // Registration is FREE - no payment required
+      // Referral code is optional (only for hierarchy mapping, no income)
       
-      const referrerDoc = usersSnapshot.docs[0]
-      const referrerData = referrerDoc.data()
+      let referredByUid = null
+      let refCodeUsed = null
       
-      if (referrerData.status === 'blocked') {
-        throw new Error('Referral code belongs to a blocked account')
+      // Optional referral code validation (only for mapping, not required)
+      if (refCode && refCode.trim().length >= 4) {
+        const usersSnapshot = await getDocs(query(collection(db, 'users'), where('refCode', '==', refCode.toUpperCase().trim())))
+        if (!usersSnapshot.empty) {
+          const referrerDoc = usersSnapshot.docs[0]
+          const referrerData = referrerDoc.data()
+          
+          if (referrerData.status !== 'blocked' && referrerData.status !== 'AUTO_BLOCKED') {
+            referredByUid = referrerDoc.id
+            refCodeUsed = refCode.toUpperCase().trim()
+          }
+        }
       }
 
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
@@ -95,29 +112,74 @@ export function AuthProvider({ children }) {
       // Generate ref code for new user
       const newRefCode = generateRefCode()
       
+      const userId = userCredential.user.uid
+      
+      // Auto-activate Leader Program on signup
+      // Get program config for Leader settings
+      const programConfigDoc = await getDoc(doc(db, 'adminConfig', 'programs'))
+      const programConfig = programConfigDoc.exists() ? programConfigDoc.data() : {
+        leaderCapMultiplier: 3.0,
+        leaderBaseAmount: 1000
+      }
+      
+      const leaderBaseAmount = programConfig.leaderBaseAmount || 1000
+      const leaderCapMultiplier = programConfig.leaderCapMultiplier || 3.0
+      const leaderCapAmount = leaderBaseAmount * leaderCapMultiplier
+
+      // Create user data with Leader program activated
       const userData = {
         name,
         email,
         phone: phone.replace(/[\s\-\(\)]/g, ''), // Clean phone number
         refCode: newRefCode,
-        referredByUid: referrerDoc.id,
-        refCodeUsed: refCode.toUpperCase().trim(),
+        referredByUid: referredByUid, // Optional - only for hierarchy
+        refCodeUsed: refCodeUsed, // Optional
         createdAt: serverTimestamp(),
-        status: 'active',
+        status: 'ACTIVE_LEADER', // Auto-activated as Leader
         role: 'user',
+        programType: 'leader', // Auto-activated as Leader
         walletBalance: 0,
         pendingBalance: 0,
         lifetimeEarned: 0,
         lifetimeWithdrawn: 0,
-        directReferrals: 0,
+        bankDetailsCompleted: false, // Must complete bank details
+        activationDeadline: null, // Not needed for auto-activated Leader
       }
       
-      await setDoc(doc(db, 'users', userCredential.user.uid), userData)
+      await setDoc(doc(db, 'users', userId), userData)
       
-      // Update referrer's direct referrals count
-      await setDoc(doc(db, 'users', referrerDoc.id), {
-        directReferrals: (referrerData.directReferrals || 0) + 1
-      }, { merge: true })
+      // Create user package for Leader
+      const packageId = `leader_${userId}_${Date.now()}`
+      await setDoc(doc(db, 'userPackages', packageId), {
+        userId: userId,
+        packageId: 'LEADER_PROGRAM',
+        packageName: 'Leader Program',
+        amount: 0, // Zero activation
+        inrPrice: 0,
+        status: 'active',
+        activatedAt: serverTimestamp(),
+        cycleNumber: 1,
+        baseAmountInr: leaderBaseAmount,
+        capMultiplier: leaderCapMultiplier,
+        capAmountInr: leaderCapAmount,
+        capStatus: 'ACTIVE',
+        workingDaysProcessed: 0,
+        totalROIEarned: 0
+      })
+
+      // Create earning cap tracker
+      await setDoc(doc(db, 'earningCaps', `${userId}_1`), {
+        uid: userId,
+        cycleNumber: 1,
+        baseAmountInr: leaderBaseAmount,
+        capMultiplier: leaderCapMultiplier,
+        capAmountInr: leaderCapAmount,
+        eligibleEarningsTotalInr: 0,
+        eligibleEarningsTotalUsd: 0,
+        remainingInr: leaderCapAmount,
+        capStatus: 'ACTIVE',
+        lastUpdatedAt: serverTimestamp()
+      })
       
       // Send email verification
       await sendEmailVerification(userCredential.user)

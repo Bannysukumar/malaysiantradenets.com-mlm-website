@@ -34,6 +34,9 @@ import UserTransfer from './pages/user/Transfer'
 import UserTransferHistory from './pages/user/TransferHistory'
 import UserActivateUser from './pages/user/ActivateUser'
 import UserActivationHistory from './pages/user/ActivationHistory'
+import UserRenewal from './pages/user/Renewal'
+import UserBankDetailsOnboarding from './pages/user/BankDetailsOnboarding'
+import UserChooseProgram from './pages/user/ChooseProgram'
 
 // Admin
 import AdminLogin from './pages/admin/Login'
@@ -48,6 +51,7 @@ import AdminBonanza from './pages/admin/Bonanza'
 import AdminTerms from './pages/admin/Terms'
 import AdminContact from './pages/admin/Contact'
 import AdminUsers from './pages/admin/Users'
+import AdminUserDetails from './pages/admin/UserDetails'
 import AdminWallets from './pages/admin/Wallets'
 import AdminWithdrawals from './pages/admin/Withdrawals'
 import AdminWithdrawalSettings from './pages/admin/WithdrawalSettings'
@@ -55,37 +59,17 @@ import AdminTransfers from './pages/admin/Transfers'
 import AdminActivations from './pages/admin/Activations'
 import AdminFeatureSettings from './pages/admin/FeatureSettings'
 import AdminSettings from './pages/admin/Settings'
+import AdminRenewalSettings from './pages/admin/RenewalSettings'
+import AdminRenewals from './pages/admin/Renewals'
+import AdminProgramSettings from './pages/admin/ProgramSettings'
+import AdminActivationRules from './pages/admin/ActivationRules'
+import AdminReferralIncomeSettings from './pages/admin/ReferralIncomeSettings'
+import AdminReferralIncomeReport from './pages/admin/ReferralIncomeReport'
 
 // Layouts
 import PublicLayout from './layouts/PublicLayout'
 import UserLayout from './layouts/UserLayout'
 import AdminLayout from './layouts/AdminLayout'
-
-function ProtectedRoute({ children, requireAdmin = false, requireSuperAdmin = false }) {
-  const { user, loading, isAdmin, isSuperAdmin } = useAuth()
-  
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    )
-  }
-  
-  if (!user) {
-    return <Navigate to="/auth" replace />
-  }
-  
-  if (requireSuperAdmin && !isSuperAdmin) {
-    return <Navigate to="/app/dashboard" replace />
-  }
-  
-  if (requireAdmin && !isAdmin && !isSuperAdmin) {
-    return <Navigate to="/app/dashboard" replace />
-  }
-  
-  return children
-}
 
 function AppRoutes() {
   return (
@@ -122,6 +106,9 @@ function AppRoutes() {
         <Route path="transfer-history" element={<UserTransferHistory />} />
         <Route path="activate-user" element={<UserActivateUser />} />
         <Route path="activation-history" element={<UserActivationHistory />} />
+        <Route path="renewal" element={<UserRenewal />} />
+        <Route path="onboarding/bank-details" element={<UserBankDetailsOnboarding />} />
+        <Route path="choose-program" element={<UserChooseProgram />} />
         <Route path="notifications" element={<UserNotifications />} />
         <Route path="support" element={<UserSupport />} />
       </Route>
@@ -140,6 +127,7 @@ function AppRoutes() {
         <Route path="terms" element={<AdminTerms />} />
         <Route path="contact" element={<AdminContact />} />
         <Route path="users" element={<AdminUsers />} />
+        <Route path="users/:uid" element={<AdminUserDetails />} />
         <Route path="wallets" element={<AdminWallets />} />
         <Route path="withdrawals" element={<AdminWithdrawals />} />
         <Route path="withdrawal-settings" element={<AdminWithdrawalSettings />} />
@@ -147,12 +135,77 @@ function AppRoutes() {
         <Route path="activations" element={<AdminActivations />} />
         <Route path="feature-settings" element={<AdminFeatureSettings />} />
         <Route path="settings" element={<AdminSettings />} />
+        <Route path="renewal-settings" element={<AdminRenewalSettings />} />
+        <Route path="renewals" element={<AdminRenewals />} />
+        <Route path="program-settings" element={<AdminProgramSettings />} />
+        <Route path="activation-rules" element={<AdminActivationRules />} />
+        <Route path="referral-income-settings" element={<AdminReferralIncomeSettings />} />
+        <Route path="referral-income" element={<AdminReferralIncomeReport />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }
+
+// ProtectedRoute must be defined outside AppRoutes but will be used inside AuthProvider context
+function ProtectedRoute({ children, requireAdmin = false, requireSuperAdmin = false }) {
+    const { user, userData, loading, isAdmin, isSuperAdmin } = useAuth()
+    const location = window.location.pathname
+    
+    if (loading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      )
+    }
+    
+    if (!user) {
+      return <Navigate to="/auth" replace />
+    }
+    
+    if (requireSuperAdmin && !isSuperAdmin) {
+      return <Navigate to="/app/dashboard" replace />
+    }
+    
+    if (requireAdmin && !isAdmin && !isSuperAdmin) {
+      return <Navigate to="/app/dashboard" replace />
+    }
+    
+    // User route checks (not for admin routes)
+    if (!requireAdmin && userData) {
+      // Check if user is blocked
+      if (userData.status === 'AUTO_BLOCKED' || userData.status === 'blocked') {
+        // Allow access to support page only
+        if (location !== '/app/support' && location !== '/app/onboarding/bank-details') {
+          return <Navigate to="/app/support" replace />
+        }
+      }
+      
+      // Check if bank details are required (skip for onboarding pages and profile page)
+      // Allow profile page so user can view/edit their bank details
+      if (!userData.bankDetailsCompleted && 
+          location !== '/app/onboarding/bank-details' && 
+          location !== '/app/support' &&
+          location !== '/app/profile') {
+        return <Navigate to="/app/onboarding/bank-details" replace />
+      }
+      
+      // Check if program selection is required (skip for onboarding pages)
+      if (userData.bankDetailsCompleted && 
+          !userData.programType && 
+          userData.status === 'PENDING_ACTIVATION' &&
+          location !== '/app/choose-program' &&
+          location !== '/app/onboarding/bank-details' &&
+          location !== '/app/support' &&
+          location !== '/app/profile') {
+        return <Navigate to="/app/choose-program" replace />
+      }
+    }
+    
+    return children
+  }
 
 function App() {
   return (

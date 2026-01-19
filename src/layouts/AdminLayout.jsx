@@ -15,7 +15,11 @@ import {
   Settings,
   LogOut,
   Wallet,
-  ArrowUpCircle
+  ArrowUpCircle,
+  RefreshCw,
+  Clock,
+  Target,
+  UserCog
 } from 'lucide-react'
 
 export default function AdminLayout() {
@@ -38,6 +42,12 @@ export default function AdminLayout() {
     { path: '/admin/withdrawals', icon: ArrowUpCircle, label: 'Withdrawals' },
     { path: '/admin/transfers', icon: DollarSign, label: 'Transfers' },
     { path: '/admin/activations', icon: Users, label: 'Activations' },
+    { path: '/admin/renewals', icon: RefreshCw, label: 'Renewals' },
+    { path: '/admin/renewal-settings', icon: RefreshCw, label: 'Renewal Settings' },
+    { path: '/admin/program-settings', icon: Target, label: 'Program Settings' },
+    { path: '/admin/activation-rules', icon: Clock, label: 'Activation Rules' },
+    { path: '/admin/referral-income-settings', icon: UserCog, label: 'Referral Income Settings' },
+    { path: '/admin/referral-income', icon: DollarSign, label: 'Referral Income Report' },
     { path: '/admin/feature-settings', icon: Settings, label: 'Feature Settings' },
     { path: '/admin/settings', icon: Settings, label: 'Settings' },
   ]

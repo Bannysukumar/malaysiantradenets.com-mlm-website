@@ -11,6 +11,7 @@ import { validateEmail } from '../../utils/validation'
 
 export default function UserActivateUser() {
   const { user, userData } = useAuth()
+  const userId = user?.uid
   const [processing, setProcessing] = useState(false)
   const [targetUser, setTargetUser] = useState(null)
   const [searching, setSearching] = useState(false)
@@ -19,6 +20,13 @@ export default function UserActivateUser() {
   const { data: packages } = useCollection('packages', [])
   
   const config = featureConfig || {}
+  
+  // Get wallet data from wallets collection
+  const walletRef = userId ? doc(db, 'wallets', userId) : null
+  const { data: walletData } = useFirestore(walletRef)
+  
+  // Use wallet data if available, fallback to userData for backward compatibility
+  const availableBalance = walletData?.availableBalance ?? userData?.walletBalance ?? 0
 
   const { register, handleSubmit, formState: { errors }, watch, setValue } = useForm({
     defaultValues: {
@@ -34,7 +42,7 @@ export default function UserActivateUser() {
 
   const selectedPlan = packages.find(p => p.id === planId)
   const activationAmount = selectedPlan?.inrPrice || selectedPlan?.usdPrice || 0
-  const availableBalance = userData?.walletBalance || 0
+  // availableBalance is already defined at top level from wallets collection
   const minBalanceAfter = config.sponsorActivationMinBalanceRule || 0
   const requiredBalance = activationAmount + minBalanceAfter
 

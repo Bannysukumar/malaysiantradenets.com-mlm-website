@@ -14,8 +14,8 @@ export default function IncomeHistory() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
+  // No need for userId filter since we're querying the user's specific subcollection
   const constraints = user?.uid ? [
-    where('userId', '==', user.uid),
     orderBy('createdAt', 'desc')
   ] : []
 
@@ -26,7 +26,12 @@ export default function IncomeHistory() {
 
   const filteredEntries = incomeEntries.filter(entry => {
     if (typeFilter !== 'all' && entry.type !== typeFilter) return false
-    if (statusFilter !== 'all' && entry.status !== statusFilter) return false
+    // Handle case-insensitive status matching (APPROVED vs approved, etc.)
+    if (statusFilter !== 'all') {
+      const entryStatus = entry.status?.toLowerCase() || ''
+      const filterStatus = statusFilter.toLowerCase()
+      if (entryStatus !== filterStatus) return false
+    }
     if (dateFrom || dateTo) {
       const entryDate = entry.createdAt?.toDate ? entry.createdAt.toDate() : new Date(entry.createdAt)
       if (dateFrom && entryDate < new Date(dateFrom)) return false
@@ -55,13 +60,22 @@ export default function IncomeHistory() {
     a.click()
   }
 
-  const getTypeLabel = (type) => {
+  const getTypeLabel = (type, entry = null) => {
     const labels = {
+      REFERRAL_DIRECT: 'Direct Referral (Level 1)',
+      REFERRAL_LEVEL: entry?.metadata?.level 
+        ? `Level ${entry.metadata.level} Referral`
+        : 'Level Referral',
       direct_referral: 'Direct Referral',
       level_income: 'Level Income',
+      achievement_level_income: 'Achievement Level Income',
       daily_roi: 'Daily ROI',
       bonus: 'Bonus',
-      admin_adjust: 'Admin Adjustment'
+      admin_adjust: 'Admin Adjustment',
+      admin_credit: 'Admin Credit'
+    }
+    if (type === 'REFERRAL_LEVEL' && entry) {
+      return labels[type]
     }
     return labels[type] || type
   }
@@ -114,11 +128,15 @@ export default function IncomeHistory() {
               className="input-field"
             >
               <option value="all">All Types</option>
-              <option value="direct_referral">Direct Referral</option>
+              <option value="REFERRAL_DIRECT">Direct Referral (Level 1)</option>
+              <option value="REFERRAL_LEVEL">Level Referral (Level 2+)</option>
+              <option value="direct_referral">Direct Referral (Legacy)</option>
               <option value="level_income">Level Income</option>
+              <option value="achievement_level_income">Achievement Level Income</option>
               <option value="daily_roi">Daily ROI</option>
               <option value="bonus">Bonus</option>
               <option value="admin_adjust">Admin Adjustment</option>
+              <option value="admin_credit">Admin Credit</option>
             </select>
           </div>
           <div>
@@ -131,6 +149,7 @@ export default function IncomeHistory() {
               <option value="all">All Status</option>
               <option value="pending">Pending</option>
               <option value="approved">Approved</option>
+              <option value="completed">Completed</option>
               <option value="paid">Paid</option>
               <option value="rejected">Rejected</option>
             </select>
@@ -182,7 +201,7 @@ export default function IncomeHistory() {
                     {formatDate(entry.createdAt)}
                   </td>
                   <td className="py-4 px-4">
-                    {getTypeLabel(entry.type)}
+                    {getTypeLabel(entry.type, entry)}
                   </td>
                   <td className="py-4 px-4 font-semibold text-primary">
                     {formatCurrency(entry.amount || 0, 'INR')}

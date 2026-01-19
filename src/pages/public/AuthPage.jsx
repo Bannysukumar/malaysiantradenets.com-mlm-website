@@ -103,25 +103,23 @@ export default function AuthPage() {
           requireNumber: true
         })
         const confirmPasswordError = validateConfirmPassword(data.password, data.confirmPassword)
-        const refCodeError = validateReferralCode(data.referralCode)
         
-        if (nameError || emailError || phoneError || passwordError || confirmPasswordError || refCodeError) {
+        if (nameError || emailError || phoneError || passwordError || confirmPasswordError) {
           if (nameError) toast.error(nameError)
           if (emailError) toast.error(emailError)
           if (phoneError) toast.error(phoneError)
           if (passwordError) toast.error(passwordError)
           if (confirmPasswordError) toast.error(confirmPasswordError)
-          if (refCodeError) toast.error(refCodeError)
           return
         }
         
-        // Validate referral code exists and is active
-        if (!refCodeValid) {
-          toast.error('Please enter a valid referral code')
+        // Referral code is optional - only validate if provided
+        if (data.referralCode && data.referralCode.trim().length >= 4 && refCodeValid === false) {
+          toast.error('Please enter a valid referral code or leave it empty')
           return
         }
         
-        await signUp(data.email, data.password, data.name, data.phone, data.referralCode)
+        await signUp(data.email, data.password, data.name, data.phone, data.referralCode || null)
         toast.success('Account created! Please check your email for verification.')
         // Navigation handled by useEffect
       }
@@ -192,24 +190,26 @@ export default function AuthPage() {
 
                 <div>
                   <label className="block text-sm font-medium mb-2">
-                    Referral Code <span className="text-red-500">*</span>
+                    Referral Code <span className="text-gray-400 text-xs">(Optional)</span>
                   </label>
                   <div className="relative">
                     <input
                       type="text"
                       {...register('referralCode', { 
-                        required: 'Referral code is required',
                         onChange: (e) => {
                           const code = e.target.value.toUpperCase().trim()
                           setRefCode(code)
                           setValue('referralCode', code)
                           if (code.length >= 4) {
                             validateReferralCodeExists(code)
+                          } else if (code.length === 0) {
+                            setRefCodeValid(null)
+                            setRefCodeError('')
                           }
                         }
                       })}
                       className={`input-field ${refCodeValid === false ? 'border-red-500' : refCodeValid === true ? 'border-green-500' : ''}`}
-                      placeholder="Enter referral code"
+                      placeholder="Enter referral code (optional)"
                       disabled={!!urlRefCode}
                     />
                     {validatingRefCode && (

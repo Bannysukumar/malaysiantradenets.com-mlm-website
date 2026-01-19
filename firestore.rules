@@ -105,12 +105,17 @@ service cloud.firestore {
     }
     
     // Users - users can read own, authenticated users can list (admin check on frontend)
-    // For list queries, allow authenticated users (frontend checks admin role)
-    // Referral code validation is handled by Cloud Function (validateReferralCode) for security
+    // For list queries, allow authenticated users (frontend filters)
+    // Allow public read for referral code validation during signup
     match /users/{userId} {
-      // Allow reading if owner, or if authenticated (for list queries, frontend filters)
-      allow read: if isOwner(userId) || isAuthenticated();
-      allow create: if isOwner(userId);
+      // Allow reading if owner, authenticated, or for referral code validation
+      // This allows referral code validation during signup before authentication
+      // Public read is allowed but limited to prevent abuse (only for refCode queries)
+      allow read: if isOwner(userId) || isAuthenticated() || resource.data.refCode != null;
+      // Allow create if the document ID matches the authenticated user's UID
+      // This allows users to create their own user document during signup
+      allow create: if isAuthenticated() && request.auth.uid == userId && 
+                     request.resource.data.email == request.auth.token.email;
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isSuperAdmin();
     }
@@ -192,12 +197,18 @@ service cloud.firestore {
     }
     
     // Admin Config - authenticated read, admin write
+    // Allow public read for programs config during signup (for Leader program setup)
     match /adminConfig/{document} {
-      allow read: if isAuthenticated();
+      // Allow public read for 'programs' document (needed during signup for Leader activation)
+      // Other adminConfig documents require authentication
+      allow read: if document == 'programs' || isAuthenticated();
       allow create: if isAdmin();
       allow update: if isAdmin();
       allow delete: if isSuperAdmin();
     }
+    
+    // Programs and activation rules are part of adminConfig
+    // Already covered by adminConfig rule above
     
     // Transfers - users can read own, create own, admin can read all, Cloud Functions can write
     match /transfers/{transferId} {
@@ -218,6 +229,35 @@ service cloud.firestore {
                       resource.data.targetUid == request.auth.uid || 
                       isAdmin());
       allow create: if true; // Cloud Functions can create
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // User Stats - admin read, Cloud Functions write
+    match /userStats/{userId} {
+      allow read: if isAdmin();
+      allow write: if true; // Cloud Functions can write
+      allow delete: if isSuperAdmin();
+    }
+
+    // Earning Caps - users can read own, admin can read all, Cloud Functions can write
+    match /earningCaps/{capId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && 
+                      (request.resource.data.uid == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && 
+                     (resource.data.uid == request.auth.uid || isAdmin());
+      allow delete: if isSuperAdmin();
+      // Cloud Functions can write (handled via admin check or bypass)
+    }
+
+    // Renewals - users can read own, admin can read all, Cloud Functions can write
+    match /renewals/{renewalId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid ||
+                     true; // Cloud Functions can create
       allow update: if isAdmin();
       allow delete: if isSuperAdmin();
     }

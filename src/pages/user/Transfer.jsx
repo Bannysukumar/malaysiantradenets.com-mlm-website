@@ -11,11 +11,19 @@ import { validateEmail } from '../../utils/validation'
 
 export default function UserTransfer() {
   const { user, userData } = useAuth()
+  const userId = user?.uid
   const [processing, setProcessing] = useState(false)
   const [lastTransferTime, setLastTransferTime] = useState(null)
   
   const { data: featureConfig } = useFirestore(doc(db, 'adminConfig', 'features'))
   const config = featureConfig || {}
+  
+  // Get wallet data from wallets collection
+  const walletRef = userId ? doc(db, 'wallets', userId) : null
+  const { data: walletData } = useFirestore(walletRef)
+  
+  // Use wallet data if available, fallback to userData for backward compatibility
+  const availableBalance = walletData?.availableBalance ?? userData?.walletBalance ?? 0
 
   const { register, handleSubmit, formState: { errors }, watch, setValue } = useForm({
     defaultValues: {
@@ -153,8 +161,6 @@ export default function UserTransfer() {
       setProcessing(false)
     }
   }
-
-  const availableBalance = userData?.walletBalance || 0
 
   return (
     <div>

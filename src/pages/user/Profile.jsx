@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useForm } from 'react-hook-form'
 import { doc, setDoc, updateDoc } from 'firebase/firestore'
@@ -37,6 +37,8 @@ export default function UserProfile() {
       confirmAccountNumber: '',
       ifsc: financialProfile?.bank?.ifsc || '',
       accountType: financialProfile?.bank?.accountType || 'savings',
+      bankName: financialProfile?.bank?.bankName || '',
+      branch: financialProfile?.bank?.branch || '',
     },
   })
 
@@ -45,6 +47,17 @@ export default function UserProfile() {
       upiId: financialProfile?.upi?.upiId || '',
     },
   })
+  
+  // Update bankDetails state when financialProfile loads
+  useEffect(() => {
+    if (financialProfile?.bank) {
+      setBankDetails({
+        bankName: financialProfile.bank.bankName || '',
+        branch: financialProfile.bank.branch || '',
+        city: financialProfile.bank.city || ''
+      })
+    }
+  }, [financialProfile])
 
   const passwordForm = useForm()
 
@@ -134,6 +147,14 @@ export default function UserProfile() {
       }
 
       await setDoc(doc(db, 'userFinancialProfiles', user.uid), bankData, { merge: true })
+      
+      // Update bankDetailsCompleted flag if not already set
+      if (!userData?.bankDetailsCompleted) {
+        await updateDoc(doc(db, 'users', user.uid), {
+          bankDetailsCompleted: true
+        })
+      }
+      
       toast.success('Bank details saved. Awaiting admin verification.')
       bankForm.reset()
     } catch (error) {
@@ -317,6 +338,60 @@ export default function UserProfile() {
             Bank Account Details
           </h2>
           
+          {/* Display existing bank details */}
+          {financialProfile?.bank?.holderName && (
+            <div className="mb-6 p-4 bg-dark-lighter rounded-lg border border-gray-700">
+              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                <CreditCard className="text-primary" size={20} />
+                Current Bank Details
+              </h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Account Holder:</span>
+                  <span className="text-white font-medium">{financialProfile.bank.holderName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Account Number:</span>
+                  <span className="text-white font-mono">{financialProfile.bank.accountNumberMasked || `XXXXXX${financialProfile.bank.accountNumberLast4 || 'XXXX'}`}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">IFSC Code:</span>
+                  <span className="text-white font-mono">{financialProfile.bank.ifsc}</span>
+                </div>
+                {financialProfile.bank.bankName && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Bank:</span>
+                    <span className="text-white">{financialProfile.bank.bankName}</span>
+                  </div>
+                )}
+                {financialProfile.bank.branch && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Branch:</span>
+                    <span className="text-white">{financialProfile.bank.branch}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Account Type:</span>
+                  <span className="text-white capitalize">{financialProfile.bank.accountType || 'Savings'}</span>
+                </div>
+                <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-700">
+                  <span className="text-gray-400">Verification Status:</span>
+                  {financialProfile.bank.isVerified ? (
+                    <span className="flex items-center gap-1 text-green-500">
+                      <CheckCircle size={16} />
+                      Verified
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-yellow-500">
+                      <XCircle size={16} />
+                      Pending Verification
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          
           {financialProfile?.bank?.isVerified && (
             <div className="mb-4 p-3 bg-green-500/10 border border-green-500 rounded-lg flex items-center gap-2">
               <CheckCircle className="text-green-500" size={20} />
@@ -330,6 +405,17 @@ export default function UserProfile() {
               <span className="text-yellow-500 text-sm">Bank details pending admin verification</span>
             </div>
           )}
+          
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold mb-2">
+              {financialProfile?.bank?.holderName ? 'Update Bank Details' : 'Add Bank Details'}
+            </h3>
+            <p className="text-sm text-gray-400">
+              {financialProfile?.bank?.holderName 
+                ? 'Update your bank account information below. Changes will require admin verification.'
+                : 'Add your bank account details to enable withdrawals.'}
+            </p>
+          </div>
 
           <form onSubmit={bankForm.handleSubmit(onBankSubmit)} className="space-y-6">
             <div>

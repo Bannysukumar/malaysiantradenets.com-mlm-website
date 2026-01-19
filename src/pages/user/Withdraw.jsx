@@ -17,6 +17,14 @@ export default function UserWithdraw() {
   const { data: withdrawalConfig } = useFirestore(doc(db, 'adminConfig', 'withdrawals'))
   const financialProfileRef = userId ? doc(db, 'userFinancialProfiles', userId) : null
   const { data: financialProfile } = useFirestore(financialProfileRef)
+  
+  // Get wallet data from wallets collection
+  const walletRef = userId ? doc(db, 'wallets', userId) : null
+  const { data: walletData } = useFirestore(walletRef)
+  
+  // Use wallet data if available, fallback to userData for backward compatibility
+  const availableBalance = walletData?.availableBalance ?? userData?.walletBalance ?? 0
+  
   const [checking, setChecking] = useState(false)
   
   const config = withdrawalConfig || {
@@ -60,7 +68,7 @@ export default function UserWithdraw() {
       }
 
       // Check minimum balance
-      if ((userData.walletBalance || 0) < config.minWithdrawal) {
+      if (availableBalance < config.minWithdrawal) {
         toast.error(`Minimum withdrawal amount is ${formatCurrency(config.minWithdrawal, 'INR')}`)
         return false
       }
@@ -115,7 +123,7 @@ export default function UserWithdraw() {
       if (!eligible) return
 
       // Check available balance
-      if (amountNum > (userData.walletBalance || 0)) {
+      if (amountNum > availableBalance) {
         toast.error('Insufficient balance')
         return
       }
@@ -166,7 +174,7 @@ export default function UserWithdraw() {
                   Available Balance
                 </label>
                 <div className="input-field bg-dark-lighter opacity-50 cursor-not-allowed">
-                  {formatCurrency(userData?.walletBalance || 0, 'INR')}
+                  {formatCurrency(availableBalance, 'INR')}
                 </div>
               </div>
 
