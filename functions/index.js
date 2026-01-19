@@ -1073,3 +1073,54 @@ exports.createSponsorActivation = functions.https.onCall(async (data, context) =
   }
 });
 
+// Validate Referral Code (Public - for signup flow)
+exports.validateReferralCode = functions.https.onCall(async (data, context) => {
+  try {
+    const { refCode } = data;
+    
+    if (!refCode || typeof refCode !== 'string' || refCode.trim().length < 4) {
+      return {
+        valid: false,
+        error: 'Invalid referral code format'
+      };
+    }
+    
+    const normalizedCode = refCode.toUpperCase().trim();
+    
+    // Query users collection for referral code
+    const usersSnapshot = await db.collection('users')
+      .where('refCode', '==', normalizedCode)
+      .limit(1)
+      .get();
+    
+    if (usersSnapshot.empty) {
+      return {
+        valid: false,
+        error: 'Referral code not found'
+      };
+    }
+    
+    const userDoc = usersSnapshot.docs[0].data();
+    
+    // Check if user is blocked
+    if (userDoc.status === 'blocked') {
+      return {
+        valid: false,
+        error: 'Referral code belongs to a blocked account'
+      };
+    }
+    
+    // Return success (don't expose full user data)
+    return {
+      valid: true,
+      error: null
+    };
+  } catch (error) {
+    console.error('Error validating referral code:', error);
+    return {
+      valid: false,
+      error: 'Error validating referral code'
+    };
+  }
+});
+

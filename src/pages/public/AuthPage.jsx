@@ -5,8 +5,7 @@ import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { getRefCodeFromUrl } from '../../utils/helpers'
 import { validateName, validateEmail, validatePhone, validatePassword, validateConfirmPassword, validateReferralCode } from '../../utils/validation'
-import { collection, query, where, getDocs } from 'firebase/firestore'
-import { db } from '../../config/firebase'
+import { getFunctions, httpsCallable } from 'firebase/functions'
 import { Eye, EyeOff } from 'lucide-react'
 
 export default function AuthPage() {
@@ -65,21 +64,18 @@ export default function AuthPage() {
     setRefCodeError('')
     
     try {
-      const usersQuery = query(collection(db, 'users'), where('refCode', '==', code.toUpperCase().trim()))
-      const snapshot = await getDocs(usersQuery)
+      const functions = getFunctions()
+      const validateReferralCode = httpsCallable(functions, 'validateReferralCode')
+      const result = await validateReferralCode({ refCode: code })
       
-      if (snapshot.empty) {
-        setRefCodeValid(false)
-        setRefCodeError('Referral code not found')
+      const { valid, error } = result.data
+      
+      if (valid) {
+        setRefCodeValid(true)
+        setRefCodeError('')
       } else {
-        const userDoc = snapshot.docs[0].data()
-        if (userDoc.status === 'blocked') {
-          setRefCodeValid(false)
-          setRefCodeError('Referral code belongs to a blocked account')
-        } else {
-          setRefCodeValid(true)
-          setRefCodeError('')
-        }
+        setRefCodeValid(false)
+        setRefCodeError(error || 'Invalid referral code')
       }
     } catch (error) {
       console.error('Error validating referral code:', error)

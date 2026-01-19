@@ -106,6 +106,7 @@ service cloud.firestore {
     
     // Users - users can read own, authenticated users can list (admin check on frontend)
     // For list queries, allow authenticated users (frontend checks admin role)
+    // Referral code validation is handled by Cloud Function (validateReferralCode) for security
     match /users/{userId} {
       // Allow reading if owner, or if authenticated (for list queries, frontend filters)
       allow read: if isOwner(userId) || isAuthenticated();
