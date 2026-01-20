@@ -4115,5 +4115,397 @@ exports.ensureUserId = functions.https.onCall(async (data, context) => {
   }
 });
 
+// Create Payout Record (Admin only)
+exports.createPayout = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+  const adminData = adminDoc.data();
+  
+  if (!adminData || (adminData.role !== 'superAdmin' && adminData.role !== 'admin' && adminData.role !== 'subAdmin')) {
+    throw new functions.https.HttpsError('permission-denied', 'Only admins can create payouts');
+  }
+
+  // Check sub-admin permissions
+  if (adminData.role === 'subAdmin') {
+    const permissions = adminData.permissions || {};
+    const payoutPerms = permissions.payoutReports || {};
+    if (!payoutPerms.create) {
+      throw new functions.https.HttpsError('permission-denied', 'You do not have permission to create payouts');
+    }
+  }
+
+  try {
+    const { memberUid, memberId, memberName, amount, paymentDate, mode, remark, proofUrl } = data;
+
+    if (!memberUid || !amount || !paymentDate) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required fields');
+    }
+
+    // Validate member has enough balance
+    const summaryDoc = await db.collection('reportUserSummary').doc(memberUid).get();
+    let balanceToBePaid = 0;
+    
+    if (summaryDoc.exists) {
+      balanceToBePaid = summaryDoc.data().balanceToBePaid || 0;
+    } else {
+      // Calculate from existing data if summary doesn't exist
+      const userDoc = await db.collection('users').doc(memberUid).get();
+      if (!userDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'Member not found');
+      }
+
+      // Get income entries
+      const entriesRef = db.collection('incomeLedger').doc(memberUid).collection('entries');
+      const entriesSnapshot = await entriesRef.get();
+      
+      let totalIncome = 0;
+      entriesSnapshot.forEach(doc => {
+        totalIncome += doc.data().amount || 0;
+      })
+
+      // Get withdrawals (paid amounts)
+      const withdrawalsSnapshot = await db.collection('withdrawals')
+        .where('uid', '==', memberUid)
+        .where('status', '==', 'paid')
+        .get();
+      
+      let amountPaid = 0;
+      withdrawalsSnapshot.forEach(doc => {
+        amountPaid += doc.data().amountRequested || doc.data().netAmount || 0;
+      });
+
+      const netAmount = totalIncome - (totalIncome * 0.15); // 15% deductions
+      balanceToBePaid = netAmount - amountPaid;
+    }
+
+    if (balanceToBePaid < amount) {
+      throw new functions.https.HttpsError('failed-precondition', 'Insufficient balance');
+    }
+
+    // Create payout record
+    const payoutRef = db.collection('payouts').doc();
+    const payoutData = {
+      memberUid,
+      memberId: memberId || memberUid,
+      memberName: memberName || 'Unknown',
+      amount: parseFloat(amount),
+      paymentDate: admin.firestore.Timestamp.fromDate(new Date(paymentDate)),
+      mode: mode || 'Bank Transfer',
+      remark: remark || '',
+      proofUrl: proofUrl || '',
+      status: 'PAID',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: context.auth.uid
+    };
+
+    await payoutRef.set(payoutData);
+
+    // Update summary (refresh to get latest data)
+    const summaryRef = db.collection('reportUserSummary').doc(memberUid);
+    const updatedSummaryDoc = await summaryRef.get();
+    
+    if (updatedSummaryDoc.exists) {
+      const currentData = updatedSummaryDoc.data();
+      await summaryRef.update({
+        amountPaid: (currentData.amountPaid || 0) + parseFloat(amount),
+        balanceToBePaid: (currentData.balanceToBePaid || 0) - parseFloat(amount),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } else {
+      // Create summary if it doesn't exist
+      const userDoc = await db.collection('users').doc(memberUid).get();
+      const userData = userDoc.data();
+      
+      // Calculate totals
+      const entriesRef = db.collection('incomeLedger').doc(memberUid).collection('entries');
+      const entriesSnapshot = await entriesRef.get();
+      
+      let totalIncome = 0;
+      entriesSnapshot.forEach(doc => {
+        totalIncome += doc.data().amount || 0;
+      });
+
+      const netAmount = totalIncome - (totalIncome * 0.15);
+      const amountPaid = parseFloat(amount);
+      const balanceToBePaid = netAmount - amountPaid;
+
+      await summaryRef.set({
+        memberId: userData?.userId || memberUid,
+        name: userData?.name || memberName || 'Unknown',
+        mobile: userData?.phone || '',
+        bank: userData?.bank || {},
+        netAmount,
+        amountPaid,
+        balanceToBePaid,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    // Add audit log
+    await db.collection('auditLogs').add({
+      action: 'CREATE_PAYOUT',
+      adminUid: context.auth.uid,
+      adminName: adminData.name || 'Unknown',
+      targetUid: memberUid,
+      targetName: memberName,
+      amount: parseFloat(amount),
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success: true, payoutId: payoutRef.id };
+  } catch (error) {
+    console.error('Error creating payout:', error);
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError('internal', 'Error creating payout: ' + error.message);
+  }
+});
+
+// Cancel Payout (SuperAdmin only)
+exports.cancelPayout = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+  const adminData = adminDoc.data();
+  
+  if (!adminData || adminData.role !== 'superAdmin') {
+    throw new functions.https.HttpsError('permission-denied', 'Only super admin can cancel payouts');
+  }
+
+  try {
+    const { payoutId } = data;
+
+    if (!payoutId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Payout ID is required');
+    }
+
+    // Get payout record
+    const payoutDoc = await db.collection('payouts').doc(payoutId).get();
+    if (!payoutDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Payout not found');
+    }
+
+    const payoutData = payoutDoc.data();
+    
+    if (payoutData.status === 'CANCELLED') {
+      throw new functions.https.HttpsError('failed-precondition', 'Payout is already cancelled');
+    }
+
+    // Mark payout as cancelled
+    await payoutDoc.ref.update({
+      status: 'CANCELLED',
+      cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+      cancelledBy: context.auth.uid
+    });
+
+    // Reverse summary values
+    const summaryRef = db.collection('reportUserSummary').doc(payoutData.memberUid);
+    const summaryDoc = await summaryRef.get();
+    
+    if (summaryDoc.exists) {
+      const currentData = summaryDoc.data();
+      await summaryRef.update({
+        amountPaid: Math.max(0, (currentData.amountPaid || 0) - payoutData.amount),
+        balanceToBePaid: (currentData.balanceToBePaid || 0) + payoutData.amount,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    // Add audit log
+    await db.collection('auditLogs').add({
+      action: 'CANCEL_PAYOUT',
+      adminUid: context.auth.uid,
+      adminName: adminData.name || 'Unknown',
+      targetUid: payoutData.memberUid,
+      targetName: payoutData.memberName,
+      amount: payoutData.amount,
+      payoutId,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error cancelling payout:', error);
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError('internal', 'Error cancelling payout: ' + error.message);
+  }
+});
+
+// Delete User and All Related Data (Admin only)
+exports.deleteUser = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+  const adminData = adminDoc.data();
+  
+  if (!adminData || (adminData.role !== 'superAdmin' && adminData.role !== 'admin')) {
+    throw new functions.https.HttpsError('permission-denied', 'Only admins can delete users');
+  }
+
+  try {
+    const { userId } = data;
+
+    if (!userId) {
+      throw new functions.https.HttpsError('invalid-argument', 'User ID is required');
+    }
+
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'User not found');
+    }
+
+    const userData = userDoc.data();
+    const batch = db.batch();
+
+    // 1. Delete user document
+    batch.delete(db.collection('users').doc(userId));
+
+    // 2. Delete wallet
+    const walletRef = db.collection('wallets').doc(userId);
+    const walletDoc = await walletRef.get();
+    if (walletDoc.exists) {
+      batch.delete(walletRef);
+    }
+
+    // 3. Delete all user packages
+    const packagesSnapshot = await db.collection('userPackages')
+      .where('userId', '==', userId)
+      .get();
+    packagesSnapshot.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+
+    // 4. Delete all withdrawals
+    const withdrawalsSnapshot = await db.collection('withdrawals')
+      .where('uid', '==', userId)
+      .get();
+    withdrawalsSnapshot.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+
+    // 5. Delete all transfers (as sender or recipient)
+    const transfersAsSender = await db.collection('transfers')
+      .where('senderUid', '==', userId)
+      .get();
+    transfersAsSender.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+
+    const transfersAsRecipient = await db.collection('transfers')
+      .where('recipientUid', '==', userId)
+      .get();
+    transfersAsRecipient.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+
+    // 6. Delete income ledger entries (subcollection)
+    const incomeLedgerRef = db.collection('incomeLedger').doc(userId);
+    const incomeLedgerDoc = await incomeLedgerRef.get();
+    if (incomeLedgerDoc.exists) {
+      const entriesSnapshot = await incomeLedgerRef.collection('entries').get();
+      entriesSnapshot.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      batch.delete(incomeLedgerRef);
+    }
+
+    // 7. Delete user financial profile and banks subcollection
+    const financialProfileRef = db.collection('userFinancialProfiles').doc(userId);
+    const financialProfileDoc = await financialProfileRef.get();
+    if (financialProfileDoc.exists) {
+      // Delete banks subcollection
+      const banksSnapshot = await financialProfileRef.collection('banks').get();
+      banksSnapshot.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      batch.delete(financialProfileRef);
+    }
+
+    // 8. Delete report user summary
+    const reportSummaryRef = db.collection('reportUserSummary').doc(userId);
+    const reportSummaryDoc = await reportSummaryRef.get();
+    if (reportSummaryDoc.exists) {
+      batch.delete(reportSummaryRef);
+    }
+
+    // 9. Delete payouts
+    const payoutsSnapshot = await db.collection('payouts')
+      .where('memberUid', '==', userId)
+      .get();
+    payoutsSnapshot.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+
+    // 10. Delete activations
+    const activationsSnapshot = await db.collection('activations')
+      .where('targetUid', '==', userId)
+      .get();
+    activationsSnapshot.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+
+    const activationsAsSponsor = await db.collection('activations')
+      .where('sponsorUid', '==', userId)
+      .get();
+    activationsAsSponsor.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+
+    // 11. Update referredByUid for users who were referred by this user (set to null or remove)
+    const referredUsersSnapshot = await db.collection('users')
+      .where('referredByUid', '==', userId)
+      .get();
+    referredUsersSnapshot.forEach(doc => {
+      batch.update(doc.ref, { referredByUid: null });
+    });
+
+    // 12. Delete user stats
+    const userStatsRef = db.collection('userStats').doc(userId);
+    const userStatsDoc = await userStatsRef.get();
+    if (userStatsDoc.exists) {
+      batch.delete(userStatsRef);
+    }
+
+    // 13. Delete audit logs related to this user
+    const auditLogsSnapshot = await db.collection('auditLogs')
+      .where('targetUid', '==', userId)
+      .get();
+    auditLogsSnapshot.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+
+    // Commit all deletions
+    await batch.commit();
+
+    // Add audit log for deletion
+    await db.collection('auditLogs').add({
+      action: 'DELETE_USER',
+      adminUid: context.auth.uid,
+      adminName: adminData.name || 'Unknown',
+      targetUid: userId,
+      targetName: userData.name || userData.email || 'Unknown',
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success: true, message: 'User and all related data deleted successfully' };
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError('internal', 'Error deleting user: ' + error.message);
+  }
+});
+
 // Auto-generate User ID when user document is created (if missing)
 

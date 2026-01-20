@@ -38,6 +38,9 @@ import UserRenewal from './pages/user/Renewal'
 import UserBankDetailsOnboarding from './pages/user/BankDetailsOnboarding'
 import UserChooseProgram from './pages/user/ChooseProgram'
 import UserLevelTree from './pages/user/LevelTree'
+import MyTeamLayout from './layouts/MyTeamLayout'
+import MyDirect from './pages/user/my-team/MyDirect'
+import UserLevelReport from './pages/user/my-team/LevelReport'
 
 // Admin
 import AdminLogin from './pages/admin/Login'
@@ -53,6 +56,8 @@ import AdminTerms from './pages/admin/Terms'
 import AdminContact from './pages/admin/Contact'
 import AdminUsers from './pages/admin/Users'
 import AdminUserDetails from './pages/admin/UserDetails'
+import AdminKYCManagement from './pages/admin/KYCManagement'
+import AdminBankVerification from './pages/admin/BankVerification'
 import AdminLevelTree from './pages/admin/LevelTree'
 import AdminWallets from './pages/admin/Wallets'
 import AdminWithdrawals from './pages/admin/Withdrawals'
@@ -60,6 +65,7 @@ import AdminWithdrawalSettings from './pages/admin/WithdrawalSettings'
 import AdminTransfers from './pages/admin/Transfers'
 import AdminActivations from './pages/admin/Activations'
 import AdminFeatureSettings from './pages/admin/FeatureSettings'
+import AdminUserMenuSettings from './pages/admin/UserMenuSettings'
 import AdminSettings from './pages/admin/Settings'
 import AdminRenewalSettings from './pages/admin/RenewalSettings'
 import AdminRenewals from './pages/admin/Renewals'
@@ -68,6 +74,18 @@ import AdminActivationRules from './pages/admin/ActivationRules'
 import AdminReferralIncomeSettings from './pages/admin/ReferralIncomeSettings'
 import AdminReferralIncomeReport from './pages/admin/ReferralIncomeReport'
 import AdminPayoutSettings from './pages/admin/PayoutSettings'
+import AdminSubAdmins from './pages/admin/SubAdmins'
+import ReportsLayout from './layouts/ReportsLayout'
+import LevelReport from './pages/admin/reports/LevelReport'
+import DirectReferralReport from './pages/admin/reports/DirectReferralReport'
+import ROIReport from './pages/admin/reports/ROIReport'
+import LevelOnROIReport from './pages/admin/reports/LevelOnROIReport'
+import ConsolidatedPayoutReport from './pages/admin/reports/ConsolidatedPayoutReport'
+import ConsolidatedWithoutDirectReport from './pages/admin/reports/ConsolidatedWithoutDirectReport'
+import AllUserIncomeReport from './pages/admin/reports/AllUserIncomeReport'
+import PayoutReportsLayout from './layouts/PayoutReportsLayout'
+import PayoutReport from './pages/admin/payout-reports/PayoutReport'
+import PayoutHistory from './pages/admin/payout-reports/PayoutHistory'
 
 // Layouts
 import PublicLayout from './layouts/PublicLayout'
@@ -115,6 +133,11 @@ function AppRoutes() {
         <Route path="notifications" element={<UserNotifications />} />
         <Route path="support" element={<UserSupport />} />
         <Route path="level-tree" element={<UserLevelTree />} />
+        <Route path="my-team" element={<MyTeamLayout />}>
+          <Route index element={<Navigate to="my-direct" replace />} />
+          <Route path="my-direct" element={<MyDirect />} />
+          <Route path="level-report" element={<UserLevelReport />} />
+        </Route>
       </Route>
 
       {/* Admin routes */}
@@ -132,6 +155,8 @@ function AppRoutes() {
         <Route path="contact" element={<AdminContact />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="users/:uid" element={<AdminUserDetails />} />
+        <Route path="kyc-management" element={<AdminKYCManagement />} />
+        <Route path="bank-verification" element={<AdminBankVerification />} />
         <Route path="level-tree" element={<AdminLevelTree />} />
         <Route path="wallets" element={<AdminWallets />} />
         <Route path="withdrawals" element={<AdminWithdrawals />} />
@@ -139,6 +164,7 @@ function AppRoutes() {
         <Route path="transfers" element={<AdminTransfers />} />
         <Route path="activations" element={<AdminActivations />} />
         <Route path="feature-settings" element={<AdminFeatureSettings />} />
+        <Route path="user-menu-settings" element={<AdminUserMenuSettings />} />
         <Route path="settings" element={<AdminSettings />} />
         <Route path="renewal-settings" element={<AdminRenewalSettings />} />
         <Route path="renewals" element={<AdminRenewals />} />
@@ -147,6 +173,22 @@ function AppRoutes() {
         <Route path="referral-income-settings" element={<AdminReferralIncomeSettings />} />
         <Route path="referral-income" element={<AdminReferralIncomeReport />} />
         <Route path="payout-settings" element={<AdminPayoutSettings />} />
+        <Route path="sub-admins" element={<AdminSubAdmins />} />
+        <Route path="reports" element={<ReportsLayout />}>
+          <Route index element={<Navigate to="level" replace />} />
+          <Route path="level" element={<LevelReport />} />
+          <Route path="direct-referral" element={<DirectReferralReport />} />
+          <Route path="roi" element={<ROIReport />} />
+          <Route path="level-on-roi" element={<LevelOnROIReport />} />
+          <Route path="consolidated" element={<ConsolidatedPayoutReport />} />
+          <Route path="consolidated-without-direct" element={<ConsolidatedWithoutDirectReport />} />
+          <Route path="all-user-income" element={<AllUserIncomeReport />} />
+        </Route>
+        <Route path="payout-reports" element={<PayoutReportsLayout />}>
+          <Route index element={<Navigate to="payout-report" replace />} />
+          <Route path="payout-report" element={<PayoutReport />} />
+          <Route path="payout-history" element={<PayoutHistory />} />
+        </Route>
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -176,7 +218,14 @@ function ProtectedRoute({ children, requireAdmin = false, requireSuperAdmin = fa
     }
     
     if (requireAdmin && !isAdmin && !isSuperAdmin) {
-      return <Navigate to="/app/dashboard" replace />
+      // Check if sub-admin has permission for this route
+      if (userData?.role === 'subAdmin') {
+        if (!hasPermission(userData, location)) {
+          return <Navigate to="/admin/dashboard" replace />
+        }
+      } else {
+        return <Navigate to="/app/dashboard" replace />
+      }
     }
     
     // User route checks (not for admin routes)

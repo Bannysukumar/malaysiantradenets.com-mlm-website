@@ -168,6 +168,14 @@ service cloud.firestore {
       allow create: if isOwner(userId);
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
+      
+      // Banks subcollection - users can read/write own banks, admin can read/write all
+      match /banks/{bankId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) || isAdmin();
+        allow update: if isOwner(userId) || isAdmin();
+        allow delete: if isOwner(userId) || isAdmin();
+      }
     }
     
     // Wallets - users can read own, admin can read all, Cloud Functions can write

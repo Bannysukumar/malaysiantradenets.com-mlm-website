@@ -2,8 +2,9 @@ import { useState, useMemo } from 'react'
 import { useCollection } from '../../hooks/useFirestore'
 import { doc, updateDoc, writeBatch } from 'firebase/firestore'
 import { db } from '../../config/firebase'
+import { getFunctions, httpsCallable } from 'firebase/functions'
 import toast from 'react-hot-toast'
-import { Users, Search, Shield, Ban, Download, Filter, MoreVertical, Eye } from 'lucide-react'
+import { Users, Search, Shield, Ban, Download, Filter, MoreVertical, Eye, Edit, Trash2 } from 'lucide-react'
 import { formatDate } from '../../utils/helpers'
 import { useNavigate } from 'react-router-dom'
 import { formatCurrency } from '../../utils/helpers'
@@ -29,6 +30,9 @@ export default function AdminUsers() {
   })
   const [sortBy, setSortBy] = useState('newest')
   const [showFilters, setShowFilters] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
+  const [deletingUser, setDeletingUser] = useState(null)
+  const [editForm, setEditForm] = useState({})
 
   // Create lookup maps for performance
   const walletMap = useMemo(() => {
@@ -218,6 +222,66 @@ export default function AdminUsers() {
     } catch (error) {
       console.error('Error performing bulk action:', error)
       toast.error('Error performing bulk action')
+    }
+  }
+
+  const handleEditUser = (user) => {
+    setEditingUser(user)
+    setEditForm({
+      name: user.name || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      status: user.status || 'active',
+      programType: user.programType || '',
+      kycVerified: user.kycVerified || false,
+      bankVerified: user.bankVerified || false,
+      transfersDisabled: user.transfersDisabled || false,
+      withdrawalsDisabled: user.withdrawalsDisabled || false
+    })
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingUser) return
+
+    try {
+      const userRef = doc(db, 'users', editingUser.id)
+      await updateDoc(userRef, {
+        ...editForm,
+        updatedAt: new Date()
+      })
+      toast.success('User updated successfully')
+      setEditingUser(null)
+      setEditForm({})
+    } catch (error) {
+      console.error('Error updating user:', error)
+      toast.error('Failed to update user')
+    }
+  }
+
+  const handleDeleteUser = async () => {
+    if (!deletingUser) return
+
+    if (!confirm(`Are you sure you want to delete user "${deletingUser.name || deletingUser.email}"? This will permanently delete ALL their data including:\n\n- User account\n- Wallet\n- Packages\n- Withdrawals\n- Transfers\n- Income records\n- All related data\n\nThis action CANNOT be undone!`)) {
+      return
+    }
+
+    try {
+      const functions = getFunctions()
+      const deleteUser = httpsCallable(functions, 'deleteUser')
+      
+      toast.loading('Deleting user and all related data...', { id: 'delete-user' })
+      
+      const result = await deleteUser({ userId: deletingUser.id })
+      
+      if (result.data?.success) {
+        toast.success('User and all related data deleted successfully', { id: 'delete-user' })
+        setDeletingUser(null)
+      } else {
+        toast.error(result.data?.error || 'Failed to delete user', { id: 'delete-user' })
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error)
+      toast.error(error.message || 'Failed to delete user', { id: 'delete-user' })
     }
   }
 
@@ -579,19 +643,208 @@ export default function AdminUsers() {
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      <button
-                        onClick={() => navigate(`/admin/users/${user.id}`)}
-                        className="btn-primary text-sm flex items-center gap-1"
-                      >
-                        <Eye size={16} />
-                        View
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => navigate(`/admin/users/${user.id}`)}
+                          className="btn-secondary text-sm flex items-center gap-1"
+                        >
+                          <Eye size={14} />
+                          View
+                        </button>
+                        <button
+                          onClick={() => handleEditUser(user)}
+                          className="btn-secondary text-sm flex items-center gap-1"
+                        >
+                          <Edit size={14} />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setDeletingUser(user)}
+                          className="btn-secondary text-sm flex items-center gap-1 text-red-400 hover:text-red-300"
+                        >
+                          <Trash2 size={14} />
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-dark-light border border-gray-700 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold mb-6">Edit User</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Name</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({...editForm, name: e.target.value})}
+                  className="input-field w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Email</label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({...editForm, email: e.target.value})}
+                  className="input-field w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Phone</label>
+                <input
+                  type="tel"
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({...editForm, phone: e.target.value})}
+                  className="input-field w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Status</label>
+                <select
+                  value={editForm.status}
+                  onChange={(e) => setEditForm({...editForm, status: e.target.value})}
+                  className="input-field w-full"
+                >
+                  <option value="active">Active</option>
+                  <option value="PENDING_ACTIVATION">Pending Activation</option>
+                  <option value="ACTIVE_INVESTOR">Active Investor</option>
+                  <option value="ACTIVE_LEADER">Active Leader</option>
+                  <option value="blocked">Blocked</option>
+                  <option value="AUTO_BLOCKED">Auto Blocked</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Program Type</label>
+                <select
+                  value={editForm.programType}
+                  onChange={(e) => setEditForm({...editForm, programType: e.target.value})}
+                  className="input-field w-full"
+                >
+                  <option value="">Not Selected</option>
+                  <option value="investor">Investor</option>
+                  <option value="leader">Leader</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.kycVerified}
+                    onChange={(e) => setEditForm({...editForm, kycVerified: e.target.checked})}
+                    className="w-4 h-4 text-primary rounded"
+                  />
+                  <span>KYC Verified</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.bankVerified}
+                    onChange={(e) => setEditForm({...editForm, bankVerified: e.target.checked})}
+                    className="w-4 h-4 text-primary rounded"
+                  />
+                  <span>Bank Verified</span>
+                </label>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.transfersDisabled}
+                    onChange={(e) => setEditForm({...editForm, transfersDisabled: e.target.checked})}
+                    className="w-4 h-4 text-primary rounded"
+                  />
+                  <span>Transfers Disabled</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.withdrawalsDisabled}
+                    onChange={(e) => setEditForm({...editForm, withdrawalsDisabled: e.target.checked})}
+                    className="w-4 h-4 text-primary rounded"
+                  />
+                  <span>Withdrawals Disabled</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={handleSaveEdit}
+                className="btn-primary flex-1"
+              >
+                Save Changes
+              </button>
+              <button
+                onClick={() => {
+                  setEditingUser(null)
+                  setEditForm({})
+                }}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-dark-light border border-gray-700 rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-2xl font-bold mb-4 text-red-400">Delete User</h2>
+            <p className="text-gray-300 mb-2">
+              Are you sure you want to delete <strong>{deletingUser.name || deletingUser.email}</strong>?
+            </p>
+            <p className="text-sm text-red-400 mb-6">
+              This will permanently delete ALL their data including:
+            </p>
+            <ul className="text-sm text-gray-400 mb-6 list-disc list-inside space-y-1">
+              <li>User account</li>
+              <li>Wallet and balances</li>
+              <li>All packages</li>
+              <li>Withdrawal requests</li>
+              <li>Transfer history</li>
+              <li>Income records</li>
+              <li>All related data</li>
+            </ul>
+            <p className="text-sm text-red-500 font-bold mb-6">
+              ⚠️ This action CANNOT be undone!
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleDeleteUser}
+                className="btn-primary bg-red-600 hover:bg-red-700 flex-1"
+              >
+                Yes, Delete User
+              </button>
+              <button
+                onClick={() => setDeletingUser(null)}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

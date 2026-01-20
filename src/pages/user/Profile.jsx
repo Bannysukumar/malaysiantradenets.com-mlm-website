@@ -1,75 +1,64 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useForm } from 'react-hook-form'
-import { doc, setDoc, updateDoc } from 'firebase/firestore'
-import { db } from '../../config/firebase'
+import { doc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc, addDoc } from 'firebase/firestore'
+import { db, storage } from '../../config/firebase'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import toast from 'react-hot-toast'
-import { User, Mail, Hash, Phone, Building2, CreditCard, Shield, Lock, CheckCircle, XCircle, Loader2, Copy, Check } from 'lucide-react'
-import { useFirestore } from '../../hooks/useFirestore'
+import { 
+  User, Mail, Hash, Phone, Building2, CreditCard, Shield, Lock, CheckCircle, XCircle, 
+  Loader2, Copy, Check, Share2, Calendar, MapPin, FileText, Upload, Camera, 
+  Trash2, Edit, Eye, EyeOff, Wallet, FileCheck, Image as ImageIcon, AlertCircle
+} from 'lucide-react'
+import { useFirestore, useCollection } from '../../hooks/useFirestore'
 import { validateIFSC, validateAccountNumber, validateUPI } from '../../utils/validation'
 import { fetchIFSCDetails } from '../../utils/ifscApi'
+import { formatCurrency, formatDate, getReferralLink } from '../../utils/helpers'
 
-export default function UserProfile() {
-  const { user, userData } = useAuth()
-  const [activeTab, setActiveTab] = useState('personal')
-  const [fetchingIFSC, setFetchingIFSC] = useState(false)
-  const [copiedUserId, setCopiedUserId] = useState(false)
-  const [bankDetails, setBankDetails] = useState({
-    bankName: '',
-    branch: '',
-    city: ''
-  })
-  
-  const copyUserId = () => {
-    if (userData?.userId) {
-      navigator.clipboard.writeText(userData.userId)
-      setCopiedUserId(true)
-      toast.success('User ID copied to clipboard!')
-      setTimeout(() => setCopiedUserId(false), 2000)
-    }
-  }
-
-  const userId = user?.uid
-  const financialProfileRef = userId ? doc(db, 'userFinancialProfiles', userId) : null
-  const { data: financialProfile, loading: profileLoading } = useFirestore(financialProfileRef)
-
-  const personalForm = useForm({
-    defaultValues: {
-      name: userData?.name || '',
-      phone: userData?.phone || '',
-    },
-  })
+// Bank Accounts Tab Component
+function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIFSC }) {
+  const [banks, setBanks] = useState([])
+  const [showAddBank, setShowAddBank] = useState(false)
+  const [editingBankId, setEditingBankId] = useState(null)
+  const [bankDetails, setBankDetails] = useState({ bankName: '', branch: '', city: '' })
+  const [fetchingIFSCState, setFetchingIFSCState] = useState(false)
 
   const bankForm = useForm({
     defaultValues: {
-      holderName: financialProfile?.bank?.holderName || '',
+      paymentType: 'bank',
+      holderName: '',
       accountNumber: '',
       confirmAccountNumber: '',
-      ifsc: financialProfile?.bank?.ifsc || '',
-      accountType: financialProfile?.bank?.accountType || 'savings',
-      bankName: financialProfile?.bank?.bankName || '',
-      branch: financialProfile?.bank?.branch || '',
+      ifsc: '',
+      accountType: 'savings',
+      bankName: '',
+      branch: '',
+      upiId: '',
+      upiName: '',
+      isPrimary: false,
     },
   })
 
-  const upiForm = useForm({
-    defaultValues: {
-      upiId: financialProfile?.upi?.upiId || '',
-    },
-  })
-  
-  // Update bankDetails state when financialProfile loads
+  // Load banks from subcollection
   useEffect(() => {
-    if (financialProfile?.bank) {
-      setBankDetails({
-        bankName: financialProfile.bank.bankName || '',
-        branch: financialProfile.bank.branch || '',
-        city: financialProfile.bank.city || ''
-      })
+    const loadBanks = async () => {
+      try {
+        const banksRef = collection(db, 'userFinancialProfiles', userId, 'banks')
+        const snapshot = await getDocs(banksRef)
+        const banksList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        setBanks(banksList)
+      } catch (error) {
+        console.error('Error loading banks:', error)
+        // Fallback to single bank in financialProfile
+        if (financialProfile?.bank) {
+          setBanks([{ id: 'default', ...financialProfile.bank, paymentType: 'bank' }])
+        }
+      }
     }
-  }, [financialProfile])
-
-  const passwordForm = useForm()
+    if (userId) {
+      loadBanks()
+    }
+  }, [userId, financialProfile])
 
   const handleFetchIFSC = async () => {
     const ifsc = bankForm.getValues('ifsc')
@@ -80,7 +69,7 @@ export default function UserProfile() {
       return
     }
 
-    setFetchingIFSC(true)
+    setFetchingIFSCState(true)
     try {
       const details = await fetchIFSCDetails(ifsc)
       
@@ -92,31 +81,782 @@ export default function UserProfile() {
         })
         bankForm.setValue('bankName', details.bank)
         bankForm.setValue('branch', details.branch)
-        bankForm.setValue('city', details.city || '')
         toast.success('Bank details fetched successfully')
       } else {
         toast.error(details.error || 'Failed to fetch bank details')
-        setBankDetails({
-          bankName: '',
-          branch: '',
-          city: ''
-        })
+        setBankDetails({ bankName: '', branch: '', city: '' })
       }
     } catch (error) {
       console.error('IFSC fetch error:', error)
       toast.error('Error fetching bank details')
     } finally {
-      setFetchingIFSC(false)
+      setFetchingIFSCState(false)
     }
   }
 
+  const onBankSubmit = async (data) => {
+    try {
+      const paymentType = data.paymentType
+
+      if (paymentType === 'bank') {
+        const accountError = validateAccountNumber(data.accountNumber, data.confirmAccountNumber)
+        if (accountError) {
+          toast.error(accountError)
+          return
+        }
+
+        const ifscError = validateIFSC(data.ifsc)
+        if (ifscError) {
+          toast.error(ifscError)
+          return
+        }
+
+        const maskedAccount = `XXXXXX${data.accountNumber.slice(-4)}`
+        const bankData = {
+          paymentType: 'bank',
+          holderName: data.holderName,
+          accountNumberMasked: maskedAccount,
+          accountNumberLast4: data.accountNumber.slice(-4),
+          ifsc: data.ifsc.toUpperCase(),
+          bankName: bankDetails.bankName || data.bankName || '',
+          branch: bankDetails.branch || data.branch || '',
+          city: bankDetails.city || '',
+          accountType: data.accountType,
+          isVerified: false,
+          isPrimary: data.isPrimary || false,
+          createdAt: new Date(),
+        }
+
+        // If setting as primary, unset other primary banks
+        if (bankData.isPrimary) {
+          for (const bank of banks) {
+            if (bank.isPrimary && bank.id !== editingBankId) {
+              const bankRef = doc(db, 'userFinancialProfiles', userId, 'banks', bank.id)
+              await updateDoc(bankRef, { isPrimary: false })
+            }
+          }
+        }
+
+        if (editingBankId) {
+          const bankRef = doc(db, 'userFinancialProfiles', userId, 'banks', editingBankId)
+          await updateDoc(bankRef, { ...bankData, updatedAt: new Date() })
+          toast.success('Bank details updated')
+        } else {
+          await addDoc(collection(db, 'userFinancialProfiles', userId, 'banks'), bankData)
+          toast.success('Bank details added. Awaiting admin verification.')
+        }
+      } else if (paymentType === 'upi') {
+        const upiError = validateUPI(data.upiId)
+        if (upiError) {
+          toast.error(upiError)
+          return
+        }
+
+        const upiData = {
+          paymentType: 'upi',
+          upiId: data.upiId.toLowerCase(),
+          upiName: data.upiName || '',
+          isVerified: false,
+          isPrimary: data.isPrimary || false,
+          createdAt: new Date(),
+        }
+
+        // If setting as primary, unset other primary banks
+        if (upiData.isPrimary) {
+          for (const bank of banks) {
+            if (bank.isPrimary && bank.id !== editingBankId) {
+              const bankRef = doc(db, 'userFinancialProfiles', userId, 'banks', bank.id)
+              await updateDoc(bankRef, { isPrimary: false })
+            }
+          }
+        }
+
+        if (editingBankId) {
+          const bankRef = doc(db, 'userFinancialProfiles', userId, 'banks', editingBankId)
+          await updateDoc(bankRef, { ...upiData, updatedAt: new Date() })
+          toast.success('UPI details updated')
+        } else {
+          await addDoc(collection(db, 'userFinancialProfiles', userId, 'banks'), upiData)
+          toast.success('UPI details added')
+        }
+      }
+
+      setShowAddBank(false)
+      setEditingBankId(null)
+      bankForm.reset()
+      setBankDetails({ bankName: '', branch: '', city: '' })
+      
+      // Reload banks
+      const banksRef = collection(db, 'userFinancialProfiles', userId, 'banks')
+      const snapshot = await getDocs(banksRef)
+      const banksList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      setBanks(banksList)
+    } catch (error) {
+      console.error('Bank save error:', error)
+      toast.error('Error saving bank details')
+    }
+  }
+
+  const handleDeleteBank = async (bankId) => {
+    const bank = banks.find(b => b.id === bankId)
+    if (bank?.isPrimary) {
+      toast.error('Cannot delete primary bank. Set another bank as primary first.')
+      return
+    }
+
+    if (!confirm('Are you sure you want to delete this bank account?')) {
+      return
+    }
+
+    try {
+      const bankRef = doc(db, 'userFinancialProfiles', userId, 'banks', bankId)
+      await deleteDoc(bankRef)
+      toast.success('Bank account deleted')
+      setBanks(banks.filter(b => b.id !== bankId))
+    } catch (error) {
+      console.error('Delete bank error:', error)
+      toast.error('Error deleting bank account')
+    }
+  }
+
+  const handleSetPrimary = async (bankId) => {
+    try {
+      // Unset all primary
+      for (const bank of banks) {
+        if (bank.isPrimary) {
+          const bankRef = doc(db, 'userFinancialProfiles', userId, 'banks', bank.id)
+          await updateDoc(bankRef, { isPrimary: false })
+        }
+      }
+
+      // Set new primary
+      const bankRef = doc(db, 'userFinancialProfiles', userId, 'banks', bankId)
+      await updateDoc(bankRef, { isPrimary: true })
+      toast.success('Primary bank updated')
+      
+      // Reload banks
+      const banksRef = collection(db, 'userFinancialProfiles', userId, 'banks')
+      const snapshot = await getDocs(banksRef)
+      const banksList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      setBanks(banksList)
+    } catch (error) {
+      console.error('Set primary error:', error)
+      toast.error('Error updating primary bank')
+    }
+  }
+
+  const handleEditBank = (bank) => {
+    setEditingBankId(bank.id)
+    setShowAddBank(true)
+    if (bank.paymentType === 'bank') {
+      bankForm.reset({
+        paymentType: 'bank',
+        holderName: bank.holderName || '',
+        accountNumber: '',
+        confirmAccountNumber: '',
+        ifsc: bank.ifsc || '',
+        accountType: bank.accountType || 'savings',
+        bankName: bank.bankName || '',
+        branch: bank.branch || '',
+        isPrimary: bank.isPrimary || false,
+      })
+      setBankDetails({
+        bankName: bank.bankName || '',
+        branch: bank.branch || '',
+        city: bank.city || ''
+      })
+    } else {
+      bankForm.reset({
+        paymentType: 'upi',
+        upiId: bank.upiId || '',
+        upiName: bank.upiName || '',
+        isPrimary: bank.isPrimary || false,
+      })
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-bold flex items-center gap-2">
+          <Building2 size={24} />
+          Bank Account Information
+        </h2>
+        <button
+          onClick={() => {
+            setShowAddBank(true)
+            setEditingBankId(null)
+            bankForm.reset({
+              paymentType: 'bank',
+              holderName: '',
+              accountNumber: '',
+              confirmAccountNumber: '',
+              ifsc: '',
+              accountType: 'savings',
+              bankName: '',
+              branch: '',
+              upiId: '',
+              upiName: '',
+              isPrimary: false,
+            })
+            setBankDetails({ bankName: '', branch: '', city: '' })
+          }}
+          className="btn-primary"
+        >
+          Add Bank / UPI
+        </button>
+      </div>
+
+      <p className="text-gray-400 mb-4">
+        Manage your bank accounts and UPI. Only the primary payment method will be used for payouts.
+      </p>
+
+      {/* Existing Banks List */}
+      {banks.length > 0 && (
+        <div className="space-y-4 mb-6">
+          {banks.map((bank) => (
+            <div key={bank.id} className="p-4 bg-dark-lighter rounded-lg border border-gray-700">
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="font-semibold">
+                      {bank.paymentType === 'bank' ? 'Bank Account' : 'UPI'}
+                    </h3>
+                    {bank.isPrimary && (
+                      <span className="badge bg-primary">Primary</span>
+                    )}
+                    {bank.isVerified ? (
+                      <span className="badge bg-green-500">Verified</span>
+                    ) : (
+                      <span className="badge bg-yellow-500">Pending</span>
+                    )}
+                  </div>
+
+                  {bank.paymentType === 'bank' ? (
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Account Holder:</span>
+                        <span>{bank.holderName}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Account Number:</span>
+                        <span className="font-mono">{bank.accountNumberMasked || `XXXXXX${bank.accountNumberLast4 || 'XXXX'}`}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">IFSC:</span>
+                        <span className="font-mono">{bank.ifsc}</span>
+                      </div>
+                      {bank.bankName && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Bank:</span>
+                          <span>{bank.bankName}</span>
+                        </div>
+                      )}
+                      {bank.branch && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Branch:</span>
+                          <span>{bank.branch}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">UPI ID:</span>
+                        <span>{bank.upiId}</span>
+                      </div>
+                      {bank.upiName && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">UPI Name:</span>
+                          <span>{bank.upiName}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  {!bank.isPrimary && (
+                    <button
+                      onClick={() => handleSetPrimary(bank.id)}
+                      className="btn-secondary text-sm"
+                    >
+                      Set Primary
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleEditBank(bank)}
+                    className="btn-secondary text-sm"
+                  >
+                    <Edit size={16} />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteBank(bank.id)}
+                    className="btn-danger text-sm"
+                    disabled={bank.isPrimary}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add/Edit Bank Form */}
+      {showAddBank && (
+        <div className="border-t border-gray-700 pt-6">
+          <h3 className="text-lg font-semibold mb-4">
+            {editingBankId ? 'Edit Payment Method' : 'Add Payment Method'}
+          </h3>
+          <form onSubmit={bankForm.handleSubmit(onBankSubmit)} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium mb-2">Payment Type *</label>
+              <select
+                {...bankForm.register('paymentType', { required: true })}
+                className="input-field"
+                onChange={(e) => {
+                  bankForm.setValue('paymentType', e.target.value)
+                  if (e.target.value === 'upi') {
+                    setBankDetails({ bankName: '', branch: '', city: '' })
+                  }
+                }}
+              >
+                <option value="bank">Bank Account</option>
+                <option value="upi">UPI</option>
+              </select>
+            </div>
+
+            {bankForm.watch('paymentType') === 'bank' ? (
+              <>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Account Holder Name *</label>
+                  <input
+                    type="text"
+                    {...bankForm.register('holderName', { required: 'Account holder name is required' })}
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Account Number *</label>
+                  <input
+                    type="text"
+                    {...bankForm.register('accountNumber', { required: 'Account number is required' })}
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Confirm Account Number *</label>
+                  <input
+                    type="text"
+                    {...bankForm.register('confirmAccountNumber', { required: 'Please confirm account number' })}
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">IFSC Code *</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      {...bankForm.register('ifsc', { required: 'IFSC code is required' })}
+                      className="input-field flex-1 uppercase"
+                      placeholder="SBIN0001234"
+                      maxLength={11}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleFetchIFSC}
+                      disabled={fetchingIFSCState}
+                      className="btn-secondary px-4"
+                    >
+                      {fetchingIFSCState ? (
+                        <Loader2 size={20} className="animate-spin" />
+                      ) : (
+                        'Fetch'
+                      )}
+                    </button>
+                  </div>
+                  {bankDetails.bankName && (
+                    <div className="mt-2 p-3 bg-dark-lighter rounded-lg">
+                      <p className="text-sm text-gray-300">Bank: {bankDetails.bankName}</p>
+                      <p className="text-sm text-gray-300">Branch: {bankDetails.branch}</p>
+                      {bankDetails.city && (
+                        <p className="text-sm text-gray-300">City: {bankDetails.city}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {!bankDetails.bankName && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Bank Name</label>
+                      <input
+                        type="text"
+                        {...bankForm.register('bankName')}
+                        className="input-field"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Branch</label>
+                      <input
+                        type="text"
+                        {...bankForm.register('branch')}
+                        className="input-field"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Account Type</label>
+                  <select {...bankForm.register('accountType')} className="input-field">
+                    <option value="savings">Savings</option>
+                    <option value="current">Current</option>
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-sm font-medium mb-2">UPI ID *</label>
+                  <input
+                    type="text"
+                    {...bankForm.register('upiId', { required: 'UPI ID is required' })}
+                    className="input-field"
+                    placeholder="name@bank"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Example: yourname@paytm</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">UPI Name / Platform</label>
+                  <input
+                    type="text"
+                    {...bankForm.register('upiName')}
+                    className="input-field"
+                    placeholder="e.g., Paytm, PhonePe, Google Pay"
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                {...bankForm.register('isPrimary')}
+                id="isPrimary"
+                className="w-4 h-4 text-primary rounded"
+              />
+              <label htmlFor="isPrimary" className="text-sm">
+                Set as primary payment method
+              </label>
+            </div>
+
+            <div className="flex gap-2">
+              <button type="submit" className="btn-primary">
+                {editingBankId ? 'Update' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddBank(false)
+                  setEditingBankId(null)
+                  bankForm.reset()
+                  setBankDetails({ bankName: '', branch: '', city: '' })
+                }}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function UserProfile() {
+  const { user, userData } = useAuth()
+  const [activeTab, setActiveTab] = useState('settings')
+  const [fetchingIFSC, setFetchingIFSC] = useState(false)
+  const [copiedField, setCopiedField] = useState(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoPreview, setPhotoPreview] = useState(null)
+  const [showAddBank, setShowAddBank] = useState(false)
+  const [editingBankId, setEditingBankId] = useState(null)
+  const [kycDocuments, setKycDocuments] = useState({
+    panImage: null,
+    aadharFront: null,
+    aadharBack: null,
+    selfie: null
+  })
+
+  const userId = user?.uid
+  const financialProfileRef = userId ? doc(db, 'userFinancialProfiles', userId) : null
+  const { data: financialProfile, loading: profileLoading } = useFirestore(financialProfileRef)
+  const { data: userPackages } = useCollection('userPackages', [])
+  const { data: kycRequests } = useCollection('kycRequests', [])
+
+  // Get active package
+  const activePackage = useMemo(() => {
+    if (!userId) return null
+    const active = userPackages.filter(pkg => pkg.userId === userId && pkg.status === 'active')
+    if (active.length === 0) return null
+    
+    // Prioritize Investor plans over Leader Program
+    const investorPlan = active.find(pkg => 
+      pkg.packageId !== 'LEADER_PROGRAM' && pkg.packageName !== 'Leader Program'
+    )
+    if (investorPlan) return investorPlan
+    
+    // If multiple, prefer higher amount
+    return active.reduce((prev, current) => {
+      const prevAmount = prev.amount || prev.inrPrice || 0
+      const currentAmount = current.amount || current.inrPrice || 0
+      return currentAmount > prevAmount ? current : prev
+    })
+  }, [userPackages, userId])
+
+  // Get user's KYC request
+  const userKycRequest = useMemo(() => {
+    if (!userId || !kycRequests) return null
+    return kycRequests.find(kyc => kyc.userId === userId)
+  }, [kycRequests, userId])
+
+  // Get sponsor info
+  const sponsorId = userData?.referredByUserId || userData?.referredByUid || 'N/A'
+  const referralLink = userData?.refCode ? getReferralLink(userData.refCode) : ''
+
+  // Copy to clipboard helper
+  const copyToClipboard = (text, fieldName) => {
+    if (text && text !== 'N/A') {
+      navigator.clipboard.writeText(text)
+      setCopiedField(fieldName)
+      toast.success(`${fieldName} copied to clipboard!`)
+      setTimeout(() => setCopiedField(null), 2000)
+    }
+  }
+
+  // Share referral link
+  const shareReferralLink = async () => {
+    if (!referralLink) {
+      toast.error('Referral link not available')
+      return
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Join me on MTN',
+          text: 'Check out this amazing opportunity!',
+          url: referralLink,
+        })
+        toast.success('Referral link shared!')
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          copyToClipboard(referralLink, 'Referral Link')
+        }
+      }
+    } else {
+      copyToClipboard(referralLink, 'Referral Link')
+    }
+  }
+
+  // Profile Photo Upload
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.match(/^image\/(jpeg|jpg|png)$/)) {
+      toast.error('Only JPG and PNG images are allowed')
+      return
+    }
+
+    // Validate file size (2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size must be less than 2MB')
+      return
+    }
+
+    // Preview
+    const reader = new FileReader()
+    reader.onload = (e) => setPhotoPreview(e.target.result)
+    reader.readAsDataURL(file)
+
+    setUploadingPhoto(true)
+    try {
+      const storageRef = ref(storage, `users/${userId}/profile-photo-${Date.now()}`)
+      await uploadBytes(storageRef, file)
+      const photoUrl = await getDownloadURL(storageRef)
+
+      await updateDoc(doc(db, 'users', userId), {
+        photoURL: photoUrl,
+        updatedAt: new Date()
+      })
+
+      toast.success('Profile photo updated successfully')
+    } catch (error) {
+      console.error('Photo upload error:', error)
+      toast.error('Error uploading photo')
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+
+  // Forms
+  const personalForm = useForm({
+    defaultValues: {
+      name: userData?.name || '',
+      phone: userData?.phone || '',
+      dateOfBirth: userData?.dateOfBirth || '',
+      gender: userData?.gender || '',
+      upiId: financialProfile?.upi?.upiId || '',
+      walletAddress: financialProfile?.walletAddress || '',
+      nomineeName: userData?.nominee?.name || '',
+      nomineeRelationship: userData?.nominee?.relationship || '',
+      nomineeMobile: userData?.nominee?.mobile || '',
+    },
+  })
+
+  const addressForm = useForm({
+    defaultValues: {
+      addressLine1: userData?.address?.line1 || '',
+      addressLine2: userData?.address?.line2 || '',
+      landmark: userData?.address?.landmark || '',
+      district: userData?.address?.district || '',
+      city: userData?.address?.city || '',
+      state: userData?.address?.state || '',
+      pinCode: userData?.address?.pinCode || '',
+    },
+  })
+
+  const kycForm = useForm({
+    defaultValues: {
+      panNumber: userData?.panNumber || '',
+      aadharNumber: userData?.aadharNumber || '',
+    },
+  })
+
+  const passwordForm = useForm()
+
+  // Update forms when data loads
+  useEffect(() => {
+    if (userData) {
+      personalForm.reset({
+        name: userData.name || '',
+        phone: userData.phone || '',
+        dateOfBirth: userData.dateOfBirth || '',
+        gender: userData.gender || '',
+        upiId: financialProfile?.upi?.upiId || '',
+        walletAddress: financialProfile?.walletAddress || '',
+        nomineeName: userData.nominee?.name || '',
+        nomineeRelationship: userData.nominee?.relationship || '',
+        nomineeMobile: userData.nominee?.mobile || '',
+      })
+    }
+  }, [userData, financialProfile])
+
+  useEffect(() => {
+    if (userData?.address) {
+      addressForm.reset({
+        addressLine1: userData.address.line1 || '',
+        addressLine2: userData.address.line2 || '',
+        landmark: userData.address.landmark || '',
+        district: userData.address.district || '',
+        city: userData.address.city || '',
+        state: userData.address.state || '',
+        pinCode: userData.address.pinCode || '',
+      })
+    }
+  }, [userData])
+
+  // Get account status badge
+  const getAccountStatusBadge = () => {
+    const status = userData?.status || 'active'
+    if (status === 'active' || status === 'ACTIVE_INVESTOR' || status === 'ACTIVE_LEADER') {
+      return <span className="badge bg-green-500">Active</span>
+    }
+    if (status === 'PENDING_ACTIVATION') {
+      return <span className="badge bg-yellow-500">Pending</span>
+    }
+    if (status === 'blocked' || status === 'AUTO_BLOCKED') {
+      return <span className="badge bg-red-500">Blocked</span>
+    }
+    if (activePackage?.capStatus === 'CAP_REACHED') {
+      return <span className="badge bg-orange-500">Cap Reached</span>
+    }
+    return <span className="badge bg-gray-500">{status}</span>
+  }
+
+  // Get KYC status badge
+  const getKycStatusBadge = () => {
+    if (!userKycRequest) {
+      return <span className="badge bg-gray-500">Not Submitted</span>
+    }
+    const status = userKycRequest.status || 'pending'
+    if (status === 'approved') {
+      return <span className="badge bg-green-500">Approved</span>
+    }
+    if (status === 'rejected') {
+      return <span className="badge bg-red-500">Rejected</span>
+    }
+    return <span className="badge bg-yellow-500">Pending</span>
+  }
+
+  // Get program type badge
+  const getProgramTypeBadge = () => {
+    const programType = userData?.programType || ''
+    if (programType === 'investor') {
+      return <span className="badge bg-blue-500">Investor</span>
+    }
+    if (programType === 'leader') {
+      return <span className="badge bg-purple-500">Leader</span>
+    }
+    return <span className="badge bg-gray-500">None</span>
+  }
+
+  // Personal Details Submit
   const onPersonalSubmit = async (data) => {
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
+      await updateDoc(doc(db, 'users', userId), {
         name: data.name,
         phone: data.phone.replace(/[\s\-\(\)]/g, ''),
+        dateOfBirth: data.dateOfBirth || null,
+        gender: data.gender || null,
+        nominee: {
+          name: data.nomineeName || null,
+          relationship: data.nomineeRelationship || null,
+          mobile: data.nomineeMobile || null,
+        },
         updatedAt: new Date(),
       })
+
+      // Update UPI and wallet in financial profile
+      if (data.upiId || data.walletAddress) {
+        const financialData = {}
+        if (data.upiId) {
+          const upiError = validateUPI(data.upiId)
+          if (upiError) {
+            toast.error(upiError)
+            return
+          }
+          financialData.upi = { upiId: data.upiId.toLowerCase(), isVerified: false }
+        }
+        if (data.walletAddress) {
+          financialData.walletAddress = data.walletAddress
+        }
+        financialData.updatedAt = new Date()
+        await setDoc(doc(db, 'userFinancialProfiles', userId), financialData, { merge: true })
+      }
+
       toast.success('Personal details updated successfully')
     } catch (error) {
       console.error('Profile update error:', error)
@@ -124,83 +864,87 @@ export default function UserProfile() {
     }
   }
 
-  const onBankSubmit = async (data) => {
+  // Address Submit
+  const onAddressSubmit = async (data) => {
     try {
-      const accountError = validateAccountNumber(data.accountNumber, data.confirmAccountNumber)
-      if (accountError) {
-        toast.error(accountError)
-        return
-      }
-
-      const ifscError = validateIFSC(data.ifsc)
-      if (ifscError) {
-        toast.error(ifscError)
-        return
-      }
-
-      // Mask account number (show only last 4 digits)
-      const maskedAccount = `XXXXXX${data.accountNumber.slice(-4)}`
-      
-      const bankData = {
-        bank: {
-          holderName: data.holderName,
-          accountNumberMasked: maskedAccount,
-          accountNumberLast4: data.accountNumber.slice(-4),
-          ifsc: data.ifsc.toUpperCase(),
-          bankName: bankDetails.bankName || data.bankName || '',
-          branch: bankDetails.branch || data.branch || '',
-          city: bankDetails.city || data.city || '',
-          accountType: data.accountType,
-          isVerified: false, // Requires admin approval
+      await updateDoc(doc(db, 'users', userId), {
+        address: {
+          line1: data.addressLine1,
+          line2: data.addressLine2,
+          landmark: data.landmark,
+          district: data.district,
+          city: data.city,
+          state: data.state,
+          pinCode: data.pinCode,
         },
         updatedAt: new Date(),
-      }
-
-      await setDoc(doc(db, 'userFinancialProfiles', user.uid), bankData, { merge: true })
-      
-      // Update bankDetailsCompleted flag if not already set
-      if (!userData?.bankDetailsCompleted) {
-        await updateDoc(doc(db, 'users', user.uid), {
-          bankDetailsCompleted: true
-        })
-      }
-      
-      toast.success('Bank details saved. Awaiting admin verification.')
-      bankForm.reset()
+      })
+      toast.success('Address updated successfully')
     } catch (error) {
-      console.error('Bank details update error:', error)
-      toast.error('Error saving bank details')
+      console.error('Address update error:', error)
+      toast.error('Error updating address')
     }
   }
 
-  const onUPISubmit = async (data) => {
+  // KYC Submit
+  const onKycSubmit = async (data) => {
     try {
-      const upiError = validateUPI(data.upiId)
-      if (upiError) {
-        toast.error(upiError)
+      // Validate PAN
+      if (!data.panNumber || data.panNumber.length !== 10) {
+        toast.error('PAN number must be 10 characters')
         return
       }
 
-      const upiData = {
-        upi: {
-          upiId: data.upiId.toLowerCase(),
-          isVerified: false, // Optional verification
-        },
-        updatedAt: new Date(),
+      // Check if documents are uploaded
+      if (!kycDocuments.panImage) {
+        toast.error('Please upload PAN image')
+        return
       }
 
-      await setDoc(doc(db, 'userFinancialProfiles', user.uid), upiData, { merge: true })
-      toast.success('UPI details saved successfully')
+      // Upload documents to Firebase Storage
+      const uploadedDocs = {}
+      for (const [key, file] of Object.entries(kycDocuments)) {
+        if (file) {
+          const storageRef = ref(storage, `users/${userId}/kyc/${key}-${Date.now()}`)
+          await uploadBytes(storageRef, file)
+          uploadedDocs[key] = await getDownloadURL(storageRef)
+        }
+      }
+
+      // Create KYC request
+      const kycRequestData = {
+        userId,
+        userEmail: user.email,
+        userName: userData.name,
+        panNumber: data.panNumber.toUpperCase(),
+        aadharNumber: data.aadharNumber || null,
+        documents: uploadedDocs,
+        status: 'pending',
+        submittedAt: new Date(),
+      }
+
+      await addDoc(collection(db, 'kycRequests'), kycRequestData)
+
+      // Update user with PAN number
+      await updateDoc(doc(db, 'users', userId), {
+        panNumber: data.panNumber.toUpperCase(),
+        aadharNumber: data.aadharNumber || null,
+        updatedAt: new Date(),
+      })
+
+      toast.success('KYC request submitted successfully')
+      setKycDocuments({ panImage: null, aadharFront: null, aadharBack: null, selfie: null })
+      kycForm.reset()
     } catch (error) {
-      console.error('UPI update error:', error)
-      toast.error('Error saving UPI details')
+      console.error('KYC submit error:', error)
+      toast.error('Error submitting KYC request')
     }
   }
 
+  // Password Change
   const onChangePassword = async (data) => {
     try {
-      // Password change should be handled via Firebase Auth
-      const { updatePassword } = await import('firebase/auth')
+      const { updatePassword, reauthenticateWithCredential, EmailAuthProvider } = await import('firebase/auth')
       const { auth } = await import('../../config/firebase')
       
       if (data.newPassword !== data.confirmNewPassword) {
@@ -208,12 +952,21 @@ export default function UserProfile() {
         return
       }
 
+      // Re-authenticate user
+      const credential = EmailAuthProvider.credential(user.email, data.currentPassword)
+      await reauthenticateWithCredential(user, credential)
+
+      // Update password
       await updatePassword(user, data.newPassword)
       toast.success('Password changed successfully')
       passwordForm.reset()
     } catch (error) {
       console.error('Password change error:', error)
-      toast.error(error.message || 'Error changing password')
+      if (error.code === 'auth/wrong-password') {
+        toast.error('Current password is incorrect')
+      } else {
+        toast.error(error.message || 'Error changing password')
+      }
     }
   }
 
@@ -229,425 +982,725 @@ export default function UserProfile() {
     <div>
       <h1 className="text-3xl font-bold mb-8">Profile</h1>
 
-      <div className="mb-6">
-        <div className="flex gap-2 border-b border-gray-700">
-          <button
-            onClick={() => setActiveTab('personal')}
-            className={`px-4 py-2 font-medium ${
-              activeTab === 'personal'
-                ? 'border-b-2 border-primary text-primary'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            Personal Details
-          </button>
-          <button
-            onClick={() => setActiveTab('bank')}
-            className={`px-4 py-2 font-medium ${
-              activeTab === 'bank'
-                ? 'border-b-2 border-primary text-primary'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            Bank Details
-          </button>
-          <button
-            onClick={() => setActiveTab('upi')}
-            className={`px-4 py-2 font-medium ${
-              activeTab === 'upi'
-                ? 'border-b-2 border-primary text-primary'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            UPI Details
-          </button>
-          <button
-            onClick={() => setActiveTab('security')}
-            className={`px-4 py-2 font-medium ${
-              activeTab === 'security'
-                ? 'border-b-2 border-primary text-primary'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            Security
-          </button>
-        </div>
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* User Settings Card - Top Right */}
+        <div className="lg:col-span-1">
+          <div className="card">
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <User size={24} />
+              User Settings
+            </h2>
+            
+            <div className="space-y-4">
+              {/* User ID */}
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-400">User ID</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={userData?.userId || 'Generating...'}
+                    disabled
+                    className="input-field bg-dark-lighter opacity-50 cursor-not-allowed pr-10"
+                  />
+                  {userData?.userId && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(userData.userId, 'User ID')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary"
+                    >
+                      {copiedField === 'User ID' ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
+                    </button>
+                  )}
+                </div>
+              </div>
 
-      {activeTab === 'personal' && (
-        <div className="card max-w-2xl">
-          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-            <User size={24} />
-            Personal Information
-          </h2>
-          <form onSubmit={personalForm.handleSubmit(onPersonalSubmit)} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium mb-2 flex items-center gap-2">
-                <User size={16} />
-                Full Name
-              </label>
-              <input
-                type="text"
-                {...personalForm.register('name', { required: 'Name is required' })}
-                className="input-field"
-              />
-            </div>
+              {/* Sponsor ID */}
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-400">Sponsor ID / Referral ID</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={sponsorId}
+                    disabled
+                    className="input-field bg-dark-lighter opacity-50 cursor-not-allowed pr-10"
+                  />
+                  {sponsorId !== 'N/A' && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(sponsorId, 'Sponsor ID')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary"
+                    >
+                      {copiedField === 'Sponsor ID' ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
+                    </button>
+                  )}
+                </div>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2 flex items-center gap-2">
-                <Mail size={16} />
-                Email
-              </label>
-              <input
-                type="email"
-                value={user?.email || ''}
-                disabled
-                className="input-field bg-dark-lighter opacity-50 cursor-not-allowed"
-              />
-              <p className="text-sm text-gray-400 mt-1">Email cannot be changed</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2 flex items-center gap-2">
-                <Hash size={16} />
-                User ID
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={userData?.userId || 'Generating...'}
-                  disabled
-                  className="input-field bg-dark-lighter opacity-50 cursor-not-allowed pr-10"
-                />
-                {userData?.userId && (
+              {/* Referral Link */}
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-400">Referral Link</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={referralLink}
+                    disabled
+                    className="input-field bg-dark-lighter opacity-50 cursor-not-allowed flex-1"
+                  />
                   <button
                     type="button"
-                    onClick={copyUserId}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary transition-colors"
-                    title="Copy User ID"
+                    onClick={() => copyToClipboard(referralLink, 'Referral Link')}
+                    className="btn-secondary px-3"
+                    title="Copy"
                   >
-                    {copiedUserId ? (
-                      <Check size={18} className="text-green-500" />
-                    ) : (
-                      <Copy size={18} />
-                    )}
+                    {copiedField === 'Referral Link' ? <Check size={18} /> : <Copy size={18} />}
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={shareReferralLink}
+                    className="btn-secondary px-3"
+                    title="Share"
+                  >
+                    <Share2 size={18} />
+                  </button>
+                </div>
               </div>
-              <p className="text-sm text-gray-400 mt-1">
-                Your unique User ID. Use this to login instead of email.
-              </p>
-            </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2 flex items-center gap-2">
-                <Phone size={16} />
-                Mobile Number
-              </label>
-              <input
-                type="tel"
-                {...personalForm.register('phone')}
-                className="input-field"
-                placeholder="10 digit mobile number"
-              />
-            </div>
+              {/* Program Type */}
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-400">Program Type</label>
+                <div>{getProgramTypeBadge()}</div>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2 flex items-center gap-2">
-                <Hash size={16} />
-                Referral Code
-              </label>
-              <input
-                type="text"
-                value={userData?.refCode || ''}
-                disabled
-                className="input-field bg-dark-lighter opacity-50 cursor-not-allowed"
-              />
-              <p className="text-sm text-gray-400 mt-1">Your unique referral code</p>
-            </div>
+              {/* Account Status */}
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-400">Account Status</label>
+                <div>{getAccountStatusBadge()}</div>
+              </div>
 
-            <button type="submit" className="btn-primary">
-              Update Personal Details
-            </button>
-          </form>
-        </div>
-      )}
-
-      {activeTab === 'bank' && (
-        <div className="card max-w-2xl">
-          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-            <Building2 size={24} />
-            Bank Account Details
-          </h2>
-          
-          {/* Display existing bank details */}
-          {financialProfile?.bank?.holderName && (
-            <div className="mb-6 p-4 bg-dark-lighter rounded-lg border border-gray-700">
-              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                <CreditCard className="text-primary" size={20} />
-                Current Bank Details
-              </h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Account Holder:</span>
-                  <span className="text-white font-medium">{financialProfile.bank.holderName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Account Number:</span>
-                  <span className="text-white font-mono">{financialProfile.bank.accountNumberMasked || `XXXXXX${financialProfile.bank.accountNumberLast4 || 'XXXX'}`}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">IFSC Code:</span>
-                  <span className="text-white font-mono">{financialProfile.bank.ifsc}</span>
-                </div>
-                {financialProfile.bank.bankName && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Bank:</span>
-                    <span className="text-white">{financialProfile.bank.bankName}</span>
-                  </div>
-                )}
-                {financialProfile.bank.branch && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Branch:</span>
-                    <span className="text-white">{financialProfile.bank.branch}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Account Type:</span>
-                  <span className="text-white capitalize">{financialProfile.bank.accountType || 'Savings'}</span>
-                </div>
-                <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-700">
-                  <span className="text-gray-400">Verification Status:</span>
-                  {financialProfile.bank.isVerified ? (
-                    <span className="flex items-center gap-1 text-green-500">
-                      <CheckCircle size={16} />
-                      Verified
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-yellow-500">
-                      <XCircle size={16} />
-                      Pending Verification
-                    </span>
+              {/* KYC Status */}
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-400">KYC Status</label>
+                <div className="flex items-center gap-2">
+                  {getKycStatusBadge()}
+                  {(!userKycRequest || userKycRequest.status === 'rejected') && (
+                    <button
+                      onClick={() => setActiveTab('kyc')}
+                      className="btn-primary text-sm px-3 py-1"
+                    >
+                      Submit KYC
+                    </button>
                   )}
                 </div>
               </div>
-            </div>
-          )}
-          
-          {financialProfile?.bank?.isVerified && (
-            <div className="mb-4 p-3 bg-green-500/10 border border-green-500 rounded-lg flex items-center gap-2">
-              <CheckCircle className="text-green-500" size={20} />
-              <span className="text-green-500 text-sm">Bank details verified by admin</span>
-            </div>
-          )}
 
-          {financialProfile?.bank && !financialProfile?.bank?.isVerified && (
-            <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500 rounded-lg flex items-center gap-2">
-              <XCircle className="text-yellow-500" size={20} />
-              <span className="text-yellow-500 text-sm">Bank details pending admin verification</span>
-            </div>
-          )}
-          
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold mb-2">
-              {financialProfile?.bank?.holderName ? 'Update Bank Details' : 'Add Bank Details'}
-            </h3>
-            <p className="text-sm text-gray-400">
-              {financialProfile?.bank?.holderName 
-                ? 'Update your bank account information below. Changes will require admin verification.'
-                : 'Add your bank account details to enable withdrawals.'}
-            </p>
-          </div>
-
-          <form onSubmit={bankForm.handleSubmit(onBankSubmit)} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium mb-2">Account Holder Name</label>
-              <input
-                type="text"
-                {...bankForm.register('holderName', { required: 'Account holder name is required' })}
-                className="input-field"
-                placeholder="Enter account holder name"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Account Number</label>
-              <input
-                type="text"
-                {...bankForm.register('accountNumber', { required: 'Account number is required' })}
-                className="input-field"
-                placeholder="Enter account number"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Confirm Account Number</label>
-              <input
-                type="text"
-                {...bankForm.register('confirmAccountNumber', { required: 'Please confirm account number' })}
-                className="input-field"
-                placeholder="Re-enter account number"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">IFSC Code</label>
-              <div className="flex gap-2">
+              {/* Activation Date */}
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-400">Activation Date</label>
                 <input
                   type="text"
-                  {...bankForm.register('ifsc', { required: 'IFSC code is required' })}
-                  className="input-field flex-1 uppercase"
-                  placeholder="SBIN0001234"
-                  maxLength={11}
+                  value={activePackage?.activatedAt ? formatDate(activePackage.activatedAt) : 'Not Activated'}
+                  disabled
+                  className="input-field bg-dark-lighter opacity-50 cursor-not-allowed"
                 />
-                <button
-                  type="button"
-                  onClick={handleFetchIFSC}
-                  disabled={fetchingIFSC}
-                  className="btn-secondary px-4"
-                >
-                  {fetchingIFSC ? (
-                    <Loader2 size={20} className="animate-spin" />
-                  ) : (
-                    'Fetch Details'
-                  )}
-                </button>
               </div>
-              {bankDetails.bankName && (
-                <div className="mt-2 p-3 bg-dark-lighter rounded-lg">
-                  <p className="text-sm text-gray-300">Bank: {bankDetails.bankName}</p>
-                  <p className="text-sm text-gray-300">Branch: {bankDetails.branch}</p>
-                  {bankDetails.city && (
-                    <p className="text-sm text-gray-300">City: {bankDetails.city}</p>
+
+              {/* Plan/Package */}
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-400">Plan/Package</label>
+                <div className="space-y-1">
+                  <input
+                    type="text"
+                    value={activePackage?.packageName || 'No Active Package'}
+                    disabled
+                    className="input-field bg-dark-lighter opacity-50 cursor-not-allowed"
+                  />
+                  {activePackage && (
+                    <input
+                      type="text"
+                      value={formatCurrency(activePackage.amount || activePackage.inrPrice || 0, 'INR')}
+                      disabled
+                      className="input-field bg-dark-lighter opacity-50 cursor-not-allowed"
+                    />
                   )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Profile Photo Card */}
+          <div className="card mt-6">
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Camera size={24} />
+              Profile Photo
+            </h2>
+            <div className="flex flex-col items-center gap-4">
+              <div className="relative">
+                {userData?.photoURL || photoPreview ? (
+                  <img
+                    src={photoPreview || userData.photoURL}
+                    alt="Profile"
+                    className="w-32 h-32 rounded-full object-cover border-2 border-primary"
+                  />
+                ) : (
+                  <div className="w-32 h-32 rounded-full bg-dark-lighter flex items-center justify-center border-2 border-primary">
+                    <User size={48} className="text-gray-400" />
+                  </div>
+                )}
+              </div>
+              <label className="btn-secondary cursor-pointer">
+                <Upload size={18} className="mr-2" />
+                {uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                  disabled={uploadingPhoto}
+                />
+              </label>
+              <p className="text-xs text-gray-400 text-center">
+                JPG or PNG, max 2MB
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content Area */}
+        <div className="lg:col-span-2">
+          <div className="mb-6">
+            <div className="flex gap-2 border-b border-gray-700 overflow-x-auto">
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`px-4 py-2 font-medium whitespace-nowrap ${
+                  activeTab === 'settings'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Settings
+              </button>
+              <button
+                onClick={() => setActiveTab('address')}
+                className={`px-4 py-2 font-medium whitespace-nowrap ${
+                  activeTab === 'address'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Address
+              </button>
+              <button
+                onClick={() => setActiveTab('bank')}
+                className={`px-4 py-2 font-medium whitespace-nowrap ${
+                  activeTab === 'bank'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Bank Accounts
+              </button>
+              <button
+                onClick={() => setActiveTab('kyc')}
+                className={`px-4 py-2 font-medium whitespace-nowrap ${
+                  activeTab === 'kyc'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                KYC Verification
+              </button>
+              <button
+                onClick={() => setActiveTab('security')}
+                className={`px-4 py-2 font-medium whitespace-nowrap ${
+                  activeTab === 'security'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Security
+              </button>
+            </div>
+          </div>
+
+          {/* Settings Tab */}
+          {activeTab === 'settings' && (
+            <div className="card">
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+                <User size={24} />
+                Personal Information
+              </h2>
+              <form onSubmit={personalForm.handleSubmit(onPersonalSubmit)} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Full Name</label>
+                    <input
+                      type="text"
+                      {...personalForm.register('name', { required: 'Name is required' })}
+                      className="input-field"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Email</label>
+                    <input
+                      type="email"
+                      value={user?.email || ''}
+                      disabled
+                      className="input-field bg-dark-lighter opacity-50 cursor-not-allowed"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Email cannot be changed</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Mobile Number</label>
+                    <input
+                      type="tel"
+                      {...personalForm.register('phone')}
+                      className="input-field"
+                      placeholder="10 digit mobile number"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Date of Birth</label>
+                    <input
+                      type="date"
+                      {...personalForm.register('dateOfBirth')}
+                      className="input-field"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Gender</label>
+                    <select {...personalForm.register('gender')} className="input-field">
+                      <option value="">Select Gender</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">UPI ID</label>
+                    <input
+                      type="text"
+                      {...personalForm.register('upiId')}
+                      className="input-field"
+                      placeholder="name@bank"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Example: yourname@paytm</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Wallet Address (USDT/BNB)</label>
+                    <input
+                      type="text"
+                      {...personalForm.register('walletAddress')}
+                      className="input-field"
+                      placeholder="Optional"
+                    />
+                  </div>
+                </div>
+
+                {/* Nominee Details */}
+                <div className="border-t border-gray-700 pt-6">
+                  <h3 className="text-lg font-semibold mb-4">Nominee Details</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Nominee Name</label>
+                      <input
+                        type="text"
+                        {...personalForm.register('nomineeName')}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Relationship</label>
+                      <select {...personalForm.register('nomineeRelationship')} className="input-field">
+                        <option value="">Select</option>
+                        <option value="spouse">Spouse</option>
+                        <option value="father">Father</option>
+                        <option value="mother">Mother</option>
+                        <option value="son">Son</option>
+                        <option value="daughter">Daughter</option>
+                        <option value="brother">Brother</option>
+                        <option value="sister">Sister</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Nominee Mobile</label>
+                      <input
+                        type="tel"
+                        {...personalForm.register('nomineeMobile')}
+                        className="input-field"
+                        placeholder="10 digit mobile number"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <button type="submit" className="btn-primary">
+                  Update Personal Details
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Address Tab - Continue in next part due to length */}
+          {activeTab === 'address' && (
+            <div className="card">
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+                <MapPin size={24} />
+                Address Information
+              </h2>
+              <form onSubmit={addressForm.handleSubmit(onAddressSubmit)} className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Address Line 1 *</label>
+                  <input
+                    type="text"
+                    {...addressForm.register('addressLine1', { required: 'Address Line 1 is required' })}
+                    className="input-field"
+                    placeholder="House/Flat No., Building Name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Address Line 2</label>
+                  <input
+                    type="text"
+                    {...addressForm.register('addressLine2')}
+                    className="input-field"
+                    placeholder="Street, Area, Locality"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Landmark</label>
+                  <input
+                    type="text"
+                    {...addressForm.register('landmark')}
+                    className="input-field"
+                    placeholder="Nearby landmark"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">District *</label>
+                    <input
+                      type="text"
+                      {...addressForm.register('district', { required: 'District is required' })}
+                      className="input-field"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">City</label>
+                    <input
+                      type="text"
+                      {...addressForm.register('city')}
+                      className="input-field"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">State</label>
+                    <input
+                      type="text"
+                      {...addressForm.register('state')}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Pin Code</label>
+                  <input
+                    type="text"
+                    {...addressForm.register('pinCode')}
+                    className="input-field"
+                    placeholder="6 digit pin code"
+                    maxLength={6}
+                  />
+                </div>
+
+                <button type="submit" className="btn-primary">
+                  Update Address
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Bank Accounts Tab */}
+          {activeTab === 'bank' && (
+            <BankAccountsTab 
+              userId={userId}
+              financialProfile={financialProfile}
+              fetchingIFSC={fetchingIFSC}
+              setFetchingIFSC={setFetchingIFSC}
+            />
+          )}
+
+          {/* KYC Tab */}
+          {activeTab === 'kyc' && (
+            <div className="card">
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+                <FileCheck size={24} />
+                KYC Verification
+              </h2>
+
+              {userKycRequest && (
+                <div className="mb-6 p-4 bg-dark-lighter rounded-lg border border-gray-700">
+                  <h3 className="font-semibold mb-2">Current KYC Status</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Status:</span>
+                      {getKycStatusBadge()}
+                    </div>
+                    {userKycRequest.submittedAt && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Submitted:</span>
+                        <span>{formatDate(userKycRequest.submittedAt)}</span>
+                      </div>
+                    )}
+                    {userKycRequest.status === 'rejected' && userKycRequest.adminRemarks && (
+                      <div>
+                        <span className="text-gray-400">Admin Remarks:</span>
+                        <p className="text-red-400 mt-1">{userKycRequest.adminRemarks}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
-            </div>
 
-            {!bankDetails.bankName && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Bank Name</label>
-                  <input
-                    type="text"
-                    {...bankForm.register('bankName')}
-                    className="input-field"
-                    placeholder="Enter bank name"
-                  />
+              {(!userKycRequest || userKycRequest.status === 'rejected') && (
+                <form onSubmit={kycForm.handleSubmit(onKycSubmit)} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">PAN Number *</label>
+                      <input
+                        type="text"
+                        {...kycForm.register('panNumber', { 
+                          required: 'PAN number is required',
+                          pattern: {
+                            value: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+                            message: 'Invalid PAN format (e.g., ABCDE1234F)'
+                          }
+                        })}
+                        className="input-field uppercase"
+                        placeholder="ABCDE1234F"
+                        maxLength={10}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Aadhar / Govt ID Number</label>
+                      <input
+                        type="text"
+                        {...kycForm.register('aadharNumber')}
+                        className="input-field"
+                        placeholder="Optional"
+                        maxLength={12}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Document Uploads */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold">Upload Documents</h3>
+                    
+                    <div>
+                      <label className="block text-sm font-medium mb-2">PAN Image *</label>
+                      <label className="btn-secondary cursor-pointer inline-flex items-center gap-2">
+                        <Upload size={18} />
+                        {kycDocuments.panImage ? kycDocuments.panImage.name : 'Upload PAN Image'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png"
+                          onChange={(e) => setKycDocuments({...kycDocuments, panImage: e.target.files[0]})}
+                          className="hidden"
+                        />
+                      </label>
+                      {kycDocuments.panImage && (
+                        <p className="text-sm text-gray-400 mt-1">{kycDocuments.panImage.name}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Aadhar Front / ID Proof</label>
+                      <label className="btn-secondary cursor-pointer inline-flex items-center gap-2">
+                        <Upload size={18} />
+                        {kycDocuments.aadharFront ? kycDocuments.aadharFront.name : 'Upload Aadhar Front'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png"
+                          onChange={(e) => setKycDocuments({...kycDocuments, aadharFront: e.target.files[0]})}
+                          className="hidden"
+                        />
+                      </label>
+                      {kycDocuments.aadharFront && (
+                        <p className="text-sm text-gray-400 mt-1">{kycDocuments.aadharFront.name}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Aadhar Back</label>
+                      <label className="btn-secondary cursor-pointer inline-flex items-center gap-2">
+                        <Upload size={18} />
+                        {kycDocuments.aadharBack ? kycDocuments.aadharBack.name : 'Upload Aadhar Back'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png"
+                          onChange={(e) => setKycDocuments({...kycDocuments, aadharBack: e.target.files[0]})}
+                          className="hidden"
+                        />
+                      </label>
+                      {kycDocuments.aadharBack && (
+                        <p className="text-sm text-gray-400 mt-1">{kycDocuments.aadharBack.name}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Selfie (Optional)</label>
+                      <label className="btn-secondary cursor-pointer inline-flex items-center gap-2">
+                        <Upload size={18} />
+                        {kycDocuments.selfie ? kycDocuments.selfie.name : 'Upload Selfie'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png"
+                          onChange={(e) => setKycDocuments({...kycDocuments, selfie: e.target.files[0]})}
+                          className="hidden"
+                        />
+                      </label>
+                      {kycDocuments.selfie && (
+                        <p className="text-sm text-gray-400 mt-1">{kycDocuments.selfie.name}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <button type="submit" className="btn-primary">
+                    Submit KYC Request
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* Security Tab */}
+          {activeTab === 'security' && (
+            <div className="card">
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+                <Lock size={24} />
+                Security Settings
+              </h2>
+
+              {/* Last Login Info */}
+              <div className="mb-6 p-4 bg-dark-lighter rounded-lg border border-gray-700">
+                <h3 className="font-semibold mb-3">Login Information</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Last Login:</span>
+                    <span>{user?.metadata?.lastSignInTime ? formatDate(new Date(user.metadata.lastSignInTime)) : 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Account Created:</span>
+                    <span>{user?.metadata?.creationTime ? formatDate(new Date(user.metadata.creationTime)) : 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Email Verified:</span>
+                    <span>{user?.emailVerified ? (
+                      <span className="text-green-500 flex items-center gap-1">
+                        <CheckCircle size={16} /> Verified
+                      </span>
+                    ) : (
+                      <span className="text-yellow-500">Not Verified</span>
+                    )}</span>
+                  </div>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">Branch</label>
-                  <input
-                    type="text"
-                    {...bankForm.register('branch')}
-                    className="input-field"
-                    placeholder="Enter branch name"
-                  />
+              {/* Change Password */}
+              <div className="mb-6">
+                <h3 className="font-semibold mb-4">Change Password</h3>
+                <form onSubmit={passwordForm.handleSubmit(onChangePassword)} className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Current Password</label>
+                    <input
+                      type="password"
+                      {...passwordForm.register('currentPassword', { required: 'Current password is required' })}
+                      className="input-field"
+                      placeholder="Enter current password"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">New Password</label>
+                    <input
+                      type="password"
+                      {...passwordForm.register('newPassword', { 
+                        required: 'New password is required',
+                        minLength: { value: 8, message: 'Password must be at least 8 characters' }
+                      })}
+                      className="input-field"
+                      placeholder="Enter new password"
+                    />
+                    <p className="text-gray-400 text-xs mt-1">
+                      Must be at least 8 characters with 1 uppercase and 1 number
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Confirm New Password</label>
+                    <input
+                      type="password"
+                      {...passwordForm.register('confirmNewPassword', { required: 'Please confirm new password' })}
+                      className="input-field"
+                      placeholder="Re-enter new password"
+                    />
+                  </div>
+
+                  <button type="submit" className="btn-primary">
+                    Change Password
+                  </button>
+                </form>
+              </div>
+
+              {/* Logout All Devices */}
+              <div className="border-t border-gray-700 pt-6">
+                <h3 className="font-semibold mb-4">Device Management</h3>
+                <div className="p-4 bg-yellow-500/10 border border-yellow-500 rounded-lg mb-4">
+                  <p className="text-sm text-yellow-500 mb-2">
+                    <AlertCircle size={16} className="inline mr-2" />
+                    Logging out from all devices will invalidate all active sessions. You'll need to login again on all devices.
+                  </p>
                 </div>
-              </>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Account Type</label>
-              <select
-                {...bankForm.register('accountType')}
-                className="input-field"
-              >
-                <option value="savings">Savings</option>
-                <option value="current">Current</option>
-              </select>
+                <button
+                  onClick={async () => {
+                    if (!confirm('Are you sure you want to logout from all devices? You will need to login again.')) {
+                      return
+                    }
+                    try {
+                      // Note: Firebase Auth doesn't have a built-in "logout all devices" feature
+                      // This would typically require a Cloud Function to revoke refresh tokens
+                      toast.info('Logout all devices feature requires backend implementation. Please contact support.')
+                    } catch (error) {
+                      console.error('Logout all error:', error)
+                      toast.error('Error logging out from all devices')
+                    }
+                  }}
+                  className="btn-secondary"
+                >
+                  Logout All Devices
+                </button>
+                <p className="text-xs text-gray-400 mt-2">
+                  This feature requires backend implementation. Contact support for assistance.
+                </p>
+              </div>
             </div>
-
-            <div className="p-4 bg-yellow-500/10 border border-yellow-500 rounded-lg">
-              <p className="text-sm text-yellow-500">
-                ⚠️ Bank details will be verified by admin before you can withdraw funds.
-              </p>
-            </div>
-
-            <button type="submit" className="btn-primary">
-              Save Bank Details
-            </button>
-          </form>
+          )}
         </div>
-      )}
-
-      {activeTab === 'upi' && (
-        <div className="card max-w-2xl">
-          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-            <CreditCard size={24} />
-            UPI Details
-          </h2>
-
-          <form onSubmit={upiForm.handleSubmit(onUPISubmit)} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium mb-2">UPI ID</label>
-              <input
-                type="text"
-                {...upiForm.register('upiId', { required: 'UPI ID is required' })}
-                className="input-field"
-                placeholder="name@bank"
-              />
-              <p className="text-sm text-gray-400 mt-1">Example: yourname@paytm</p>
-            </div>
-
-            <button type="submit" className="btn-primary">
-              Save UPI Details
-            </button>
-          </form>
-        </div>
-      )}
-
-      {activeTab === 'security' && (
-        <div className="card max-w-2xl">
-          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-            <Lock size={24} />
-            Security Settings
-          </h2>
-
-          <form onSubmit={passwordForm.handleSubmit(onChangePassword)} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium mb-2">Current Password</label>
-              <input
-                type="password"
-                {...passwordForm.register('currentPassword', { required: 'Current password is required' })}
-                className="input-field"
-                placeholder="Enter current password"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">New Password</label>
-              <input
-                type="password"
-                {...passwordForm.register('newPassword', { 
-                  required: 'New password is required',
-                  minLength: { value: 8, message: 'Password must be at least 8 characters' }
-                })}
-                className="input-field"
-                placeholder="Enter new password"
-              />
-              <p className="text-gray-400 text-xs mt-1">
-                Must be at least 8 characters with 1 uppercase and 1 number
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Confirm New Password</label>
-              <input
-                type="password"
-                {...passwordForm.register('confirmNewPassword', { required: 'Please confirm new password' })}
-                className="input-field"
-                placeholder="Re-enter new password"
-              />
-            </div>
-
-            <button type="submit" className="btn-primary">
-              Change Password
-            </button>
-          </form>
-        </div>
-      )}
+      </div>
     </div>
   )
 }
