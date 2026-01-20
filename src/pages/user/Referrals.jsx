@@ -2,7 +2,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useFirestore, useCollection } from '../../hooks/useFirestore'
 import { doc, query, where, orderBy, collection } from 'firebase/firestore'
 import { db } from '../../config/firebase'
-import { Copy, Users, DollarSign, AlertCircle, History } from 'lucide-react'
+import { Copy, Users, DollarSign, AlertCircle, History, Share2, TrendingUp, Sparkles, ArrowRight } from 'lucide-react'
 import { getReferralLink, formatCurrency, formatDate } from '../../utils/helpers'
 import toast from 'react-hot-toast'
 import { useState, useMemo } from 'react'
@@ -25,7 +25,6 @@ export default function UserReferrals() {
   }, [allUsers, userId])
 
   // Get referral income history (both direct and level income)
-  // Note: Query subcollection directly - no userId field needed in entries
   const { data: incomeEntries, loading: incomeLoading } = useCollection(
     userId ? `incomeLedger/${userId}/entries` : 'incomeLedger',
     userId ? [
@@ -63,6 +62,18 @@ export default function UserReferrals() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const shareReferralLink = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: 'Join Malaysian Trade Net',
+        text: 'Join me on Malaysian Trade Net and start earning!',
+        url: referralLink,
+      }).catch(() => {})
+    } else {
+      copyToClipboard()
+    }
+  }
+
   const maskEmail = (email) => {
     if (!email) return 'N/A'
     const [name, domain] = email.split('@')
@@ -71,14 +82,22 @@ export default function UserReferrals() {
   }
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-8">Referral Program</h1>
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+          Referral Program
+        </h1>
+        <p className="text-gray-400">Grow your network and earn rewards</p>
+      </div>
 
       {/* Leader Message */}
       {isLeader && (
-        <div className="card border-yellow-500 border-2 mb-6">
+        <div className="card border-2 border-yellow-500/50 bg-gradient-to-r from-yellow-500/10 to-transparent">
           <div className="flex items-start gap-4">
-            <AlertCircle className="text-yellow-500 flex-shrink-0 mt-0.5" size={24} />
+            <div className="p-3 bg-yellow-500/20 rounded-lg flex-shrink-0">
+              <AlertCircle className="text-yellow-500" size={24} />
+            </div>
             <div>
               <h2 className="text-xl font-bold text-yellow-500 mb-2">Referral Income Not Available</h2>
               <p className="text-gray-300">
@@ -90,27 +109,35 @@ export default function UserReferrals() {
         </div>
       )}
 
-      {/* Referral Link */}
-      <div className="card mb-6">
+      {/* Referral Link Card - Enhanced */}
+      <div className="card bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-primary/20">
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
           <Users className="text-primary" size={24} />
           Your Referral Link
         </h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 mb-3">
           <input
             type="text"
             value={referralLink}
             readOnly
-            className="input-field flex-1"
+            className="input-field flex-1 bg-dark-lighter"
           />
           <button
             onClick={copyToClipboard}
-            className="btn-primary px-4"
+            className={`btn-primary px-4 flex items-center gap-2 ${copied ? 'bg-green-500 hover:bg-green-600' : ''}`}
           >
-            <Copy size={20} />
+            <Copy size={18} />
+            {copied ? 'Copied!' : 'Copy'}
+          </button>
+          <button
+            onClick={shareReferralLink}
+            className="btn-secondary px-4 flex items-center gap-2"
+          >
+            <Share2 size={18} />
+            Share
           </button>
         </div>
-        <p className="text-sm text-gray-400 mt-2">
+        <p className="text-sm text-gray-400">
           Share this link with others. {isInvestor && `Earn ${directPercent}% when they activate as Investor.`}
         </p>
       </div>
@@ -118,55 +145,80 @@ export default function UserReferrals() {
       {/* Investor Referral Income Section */}
       {isInvestor && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            <div className="card">
-              <h3 className="text-sm text-gray-400 mb-2">Direct Referral Commission</h3>
-              <p className="text-3xl font-bold text-primary">{directPercent}%</p>
-              <p className="text-sm text-gray-400 mt-1">On Investor activation</p>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="card hover:border-primary transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 transform hover:-translate-y-1">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-sm mb-2 font-medium">Direct Commission</p>
+                  <p className="text-3xl font-bold text-primary">{directPercent}%</p>
+                  <p className="text-xs text-gray-500 mt-1">On Investor activation</p>
+                </div>
+                <div className="p-3 bg-primary/10 rounded-xl">
+                  <TrendingUp className="text-primary" size={28} />
+                </div>
+              </div>
             </div>
 
-            <div className="card">
-              <h3 className="text-sm text-gray-400 mb-2">Total Referral Income</h3>
-              <p className="text-3xl font-bold text-green-500">{formatCurrency(referralIncomeTotal, 'INR')}</p>
-              <p className="text-sm text-gray-400 mt-1">Lifetime earned</p>
+            <div className="card hover:border-primary transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 transform hover:-translate-y-1">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-sm mb-2 font-medium">Total Referral Income</p>
+                  <p className="text-3xl font-bold text-green-500">{formatCurrency(referralIncomeTotal, 'INR')}</p>
+                  <p className="text-xs text-gray-500 mt-1">Lifetime earned</p>
+                </div>
+                <div className="p-3 bg-green-500/10 rounded-xl">
+                  <DollarSign className="text-green-500" size={28} />
+                </div>
+              </div>
             </div>
 
-            <div className="card">
-              <h3 className="text-sm text-gray-400 mb-2">Direct Referrals</h3>
-              <p className="text-3xl font-bold text-white">{directReferrals.length}</p>
-              <p className="text-sm text-gray-400 mt-1">Total referrals</p>
+            <div className="card hover:border-primary transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 transform hover:-translate-y-1">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-sm mb-2 font-medium">Direct Referrals</p>
+                  <p className="text-3xl font-bold text-white">{directReferrals.length}</p>
+                  <p className="text-xs text-gray-500 mt-1">Total referrals</p>
+                </div>
+                <div className="p-3 bg-primary/10 rounded-xl">
+                  <Users className="text-primary" size={28} />
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Direct Referrals List */}
-          <div className="card mb-6">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+          <div className="card">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
               <Users className="text-primary" size={24} />
               Direct Referrals
             </h2>
             {directReferrals.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <Users className="mx-auto mb-2" size={48} />
-                <p>No referrals yet. Share your referral link to get started!</p>
+              <div className="text-center py-12">
+                <div className="p-4 bg-primary/10 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                  <Users className="text-primary" size={40} />
+                </div>
+                <p className="text-gray-400 text-lg mb-2">No referrals yet</p>
+                <p className="text-gray-500 text-sm">Share your referral link to get started!</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-700">
-                      <th className="text-left py-3 px-4 font-semibold">Name</th>
-                      <th className="text-left py-3 px-4 font-semibold">Email</th>
-                      <th className="text-left py-3 px-4 font-semibold">Status</th>
-                      <th className="text-left py-3 px-4 font-semibold">Program</th>
-                      <th className="text-left py-3 px-4 font-semibold">Joined</th>
+                      <th className="text-left py-4 px-4 font-semibold">Name</th>
+                      <th className="text-left py-4 px-4 font-semibold">Email</th>
+                      <th className="text-left py-4 px-4 font-semibold">Status</th>
+                      <th className="text-left py-4 px-4 font-semibold">Program</th>
+                      <th className="text-left py-4 px-4 font-semibold">Joined</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {directReferrals.map((ref) => (
-                      <tr key={ref.id} className="border-b border-gray-800 hover:bg-dark-lighter">
-                        <td className="py-3 px-4">{ref.name || 'N/A'}</td>
-                        <td className="py-3 px-4 text-sm">{maskEmail(ref.email)}</td>
-                        <td className="py-3 px-4">
+                    {directReferrals.map((ref, idx) => (
+                      <tr key={ref.id} className={`border-b border-gray-800 hover:bg-dark-lighter transition-colors ${idx % 2 === 0 ? 'bg-dark-lighter/50' : ''}`}>
+                        <td className="py-4 px-4 font-medium">{ref.name || 'N/A'}</td>
+                        <td className="py-4 px-4 text-sm text-gray-300">{maskEmail(ref.email)}</td>
+                        <td className="py-4 px-4">
                           <span className={`badge ${
                             ref.status === 'ACTIVE_INVESTOR' ? 'bg-green-500' :
                             ref.status === 'ACTIVE_LEADER' ? 'bg-purple-500' :
@@ -176,13 +228,13 @@ export default function UserReferrals() {
                             {ref.status || 'N/A'}
                           </span>
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-4 px-4">
                           <span className="badge">
                             {ref.programType === 'investor' ? 'Investor' :
                              ref.programType === 'leader' ? 'Leader' : 'Not Selected'}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-400">
+                        <td className="py-4 px-4 text-sm text-gray-400">
                           {ref.createdAt ? formatDate(ref.createdAt) : 'N/A'}
                         </td>
                       </tr>
@@ -195,49 +247,53 @@ export default function UserReferrals() {
 
           {/* Referral Income History */}
           <div className="card">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <History className="text-primary" size={24} />
                 Referral Income History
               </h2>
-              <Link to="/app/income-history" className="text-primary hover:underline text-sm">
-                View All Income →
+              <Link to="/app/income-history" className="text-primary hover:underline text-sm flex items-center gap-1">
+                View All Income
+                <ArrowRight size={16} />
               </Link>
             </div>
             {incomeLoading ? (
-              <div className="text-center py-8 text-gray-400">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mx-auto mb-2"></div>
-                <p>Loading referral income...</p>
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mx-auto mb-3"></div>
+                <p className="text-gray-400">Loading referral income...</p>
               </div>
             ) : !incomeEntries || incomeEntries.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <DollarSign className="mx-auto mb-2" size={48} />
-                <p>No referral income yet. Referrals will appear here when they activate as Investors.</p>
+              <div className="text-center py-12">
+                <div className="p-4 bg-primary/10 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                  <DollarSign className="text-primary" size={40} />
+                </div>
+                <p className="text-gray-400 text-lg mb-2">No referral income yet</p>
+                <p className="text-gray-500 text-sm">Referrals will appear here when they activate as Investors.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-700">
-                      <th className="text-left py-3 px-4 font-semibold">Date</th>
-                      <th className="text-left py-3 px-4 font-semibold">Amount</th>
-                      <th className="text-left py-3 px-4 font-semibold">Status</th>
-                      <th className="text-left py-3 px-4 font-semibold">Description</th>
+                      <th className="text-left py-4 px-4 font-semibold">Date</th>
+                      <th className="text-left py-4 px-4 font-semibold">Amount</th>
+                      <th className="text-left py-4 px-4 font-semibold">Status</th>
+                      <th className="text-left py-4 px-4 font-semibold">Description</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {incomeEntries?.slice(0, 10).map((entry) => (
-                      <tr key={entry.id} className="border-b border-gray-800 hover:bg-dark-lighter">
-                        <td className="py-3 px-4 text-sm">
+                    {incomeEntries?.slice(0, 10).map((entry, idx) => (
+                      <tr key={entry.id} className={`border-b border-gray-800 hover:bg-dark-lighter transition-colors ${idx % 2 === 0 ? 'bg-dark-lighter/50' : ''}`}>
+                        <td className="py-4 px-4 text-sm text-gray-300">
                           {entry.createdAt ? formatDate(entry.createdAt) : 'N/A'}
                         </td>
-                        <td className="py-3 px-4 font-semibold text-green-500">
+                        <td className="py-4 px-4 font-semibold text-green-500">
                           {formatCurrency(entry.amount || 0, 'INR')}
                           {entry.type === 'REFERRAL_LEVEL' && entry.metadata?.level && (
                             <span className="text-xs text-gray-400 ml-2">(Level {entry.metadata.level})</span>
                           )}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-4 px-4">
                           <span className={`badge ${
                             entry.status === 'APPROVED' || entry.status === 'completed' ? 'bg-green-500' :
                             entry.status === 'PENDING' ? 'bg-yellow-500' :
@@ -246,7 +302,7 @@ export default function UserReferrals() {
                             {entry.status || 'N/A'}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-400">
+                        <td className="py-4 px-4 text-sm text-gray-400">
                           {entry.description || 'N/A'}
                         </td>
                       </tr>
@@ -254,9 +310,10 @@ export default function UserReferrals() {
                   </tbody>
                 </table>
                 {incomeEntries?.length > 10 && (
-                  <div className="text-center py-4">
-                    <Link to="/app/income-history" className="text-primary hover:underline text-sm">
-                      View all {incomeEntries.length} entries →
+                  <div className="text-center py-4 border-t border-gray-800">
+                    <Link to="/app/income-history" className="text-primary hover:underline text-sm flex items-center justify-center gap-1">
+                      View all {incomeEntries.length} entries
+                      <ArrowRight size={16} />
                     </Link>
                   </div>
                 )}
@@ -268,23 +325,21 @@ export default function UserReferrals() {
 
       {/* Pending Activation Message */}
       {!isInvestor && !isLeader && (
-        <div className="card border-yellow-500 border-2">
+        <div className="card border-2 border-yellow-500/50 bg-gradient-to-r from-yellow-500/10 to-transparent">
           <div className="flex items-start gap-4">
-            <AlertCircle className="text-yellow-500 flex-shrink-0 mt-0.5" size={24} />
+            <div className="p-3 bg-yellow-500/20 rounded-lg flex-shrink-0">
+              <AlertCircle className="text-yellow-500" size={24} />
+            </div>
             <div>
               <h2 className="text-xl font-bold text-yellow-500 mb-2">Activate to Earn Referral Income</h2>
               <p className="text-gray-300 mb-4">
                 Activate as an Investor to start earning referral income when your referrals activate.
               </p>
               {!isLeader && (
-                <Link to="/app/choose-program" className="btn-primary inline-block">
+                <Link to="/app/choose-program" className="btn-primary inline-flex items-center gap-2">
                   Choose Program
+                  <ArrowRight size={18} />
                 </Link>
-              )}
-              {isLeader && (
-                <div className="text-sm text-gray-400">
-                  You are already activated as a Leader. Referral income is not available for Leaders.
-                </div>
               )}
             </div>
           </div>
@@ -293,4 +348,3 @@ export default function UserReferrals() {
     </div>
   )
 }
-

@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from './contexts/AuthContext'
 import { useAuth } from './contexts/AuthContext'
+import { hasPermission } from './utils/permissions'
 
 // Public pages
 import Home from './pages/public/Home'
@@ -19,6 +20,8 @@ import Bonanza from './pages/public/Bonanza'
 import Terms from './pages/public/Terms'
 import Contact from './pages/public/Contact'
 import AuthPage from './pages/public/AuthPage'
+import ForgotPassword from './pages/public/ForgotPassword'
+import ResetPassword from './pages/public/ResetPassword'
 
 // User app
 import UserDashboard from './pages/user/Dashboard'
@@ -112,6 +115,8 @@ function AppRoutes() {
         <Route path="terms" element={<Terms />} />
         <Route path="contact" element={<Contact />} />
         <Route path="auth" element={<AuthPage />} />
+        <Route path="forgot-password" element={<ForgotPassword />} />
+        <Route path="reset-password" element={<ResetPassword />} />
       </Route>
 
       {/* User app routes */}

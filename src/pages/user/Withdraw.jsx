@@ -5,7 +5,7 @@ import { doc, collection, query, where, getDocs, addDoc, serverTimestamp } from 
 import { db } from '../../config/firebase'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
-import { Wallet, DollarSign, AlertCircle } from 'lucide-react'
+import { Wallet, DollarSign, AlertCircle, Info, ArrowUpCircle, CreditCard, Smartphone, CheckCircle } from 'lucide-react'
 import { formatCurrency } from '../../utils/helpers'
 import { validateWithdrawalAmount } from '../../utils/validation'
 import { httpsCallable } from 'firebase/functions'
@@ -157,83 +157,163 @@ export default function UserWithdraw() {
   }
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-8 flex items-center gap-2">
-        <Wallet className="text-primary" size={32} />
-        Request Withdrawal
-      </h1>
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent flex items-center gap-3">
+          <ArrowUpCircle className="text-primary" size={36} />
+          Request Withdrawal
+        </h1>
+        <p className="text-gray-400">Withdraw your earnings to your bank account or UPI</p>
+      </div>
+
+      {/* Available Balance Card */}
+      <div className="card bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-primary/20">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-gray-400 text-sm mb-2 font-medium">Available Balance</p>
+            <p className="text-4xl font-bold text-white mb-1">
+              {formatCurrency(availableBalance, 'INR')}
+            </p>
+            <p className="text-sm text-gray-500">Ready to withdraw</p>
+          </div>
+          <div className="p-4 bg-primary/20 rounded-xl">
+            <Wallet className="text-primary" size={40} />
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Withdrawal Form */}
         <div className="lg:col-span-2">
           <div className="card">
-            <h2 className="text-xl font-bold mb-6">Withdrawal Details</h2>
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <DollarSign className="text-primary" size={24} />
+              Withdrawal Details
+            </h2>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium mb-2">
-                  Available Balance
-                </label>
-                <div className="input-field bg-dark-lighter opacity-50 cursor-not-allowed">
-                  {formatCurrency(availableBalance, 'INR')}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">
+                <label className="block text-sm font-medium mb-2 text-white">
                   Withdrawal Method <span className="text-red-500">*</span>
                 </label>
-                <select
-                  {...register('method', { required: 'Please select withdrawal method' })}
-                  className="input-field"
-                >
+                <div className="grid grid-cols-2 gap-4">
                   {config.allowedMethods?.includes('bank') && (
-                    <option value="bank">Bank Transfer</option>
+                    <label className={`relative cursor-pointer ${method === 'bank' ? 'ring-2 ring-primary' : ''}`}>
+                      <input
+                        type="radio"
+                        value="bank"
+                        {...register('method', { required: 'Please select withdrawal method' })}
+                        className="sr-only"
+                      />
+                      <div className={`p-4 rounded-lg border-2 transition-all ${
+                        method === 'bank' 
+                          ? 'border-primary bg-primary/10' 
+                          : 'border-gray-700 hover:border-gray-600'
+                      }`}>
+                        <div className="flex items-center gap-3">
+                          <CreditCard className={method === 'bank' ? 'text-primary' : 'text-gray-400'} size={24} />
+                          <div>
+                            <p className="font-semibold text-white">Bank Transfer</p>
+                            <p className="text-xs text-gray-400">Direct to account</p>
+                          </div>
+                        </div>
+                      </div>
+                    </label>
                   )}
                   {config.allowedMethods?.includes('upi') && (
-                    <option value="upi">UPI</option>
+                    <label className={`relative cursor-pointer ${method === 'upi' ? 'ring-2 ring-primary' : ''}`}>
+                      <input
+                        type="radio"
+                        value="upi"
+                        {...register('method', { required: 'Please select withdrawal method' })}
+                        className="sr-only"
+                      />
+                      <div className={`p-4 rounded-lg border-2 transition-all ${
+                        method === 'upi' 
+                          ? 'border-primary bg-primary/10' 
+                          : 'border-gray-700 hover:border-gray-600'
+                      }`}>
+                        <div className="flex items-center gap-3">
+                          <Smartphone className={method === 'upi' ? 'text-primary' : 'text-gray-400'} size={24} />
+                          <div>
+                            <p className="font-semibold text-white">UPI</p>
+                            <p className="text-xs text-gray-400">Instant transfer</p>
+                          </div>
+                        </div>
+                      </div>
+                    </label>
                   )}
-                </select>
+                </div>
                 {errors.method && (
                   <p className="text-red-500 text-sm mt-1">{errors.method.message}</p>
                 )}
               </div>
 
               {method === 'bank' && (
-                <div className="p-4 bg-dark-lighter rounded-lg">
-                  <h3 className="font-semibold mb-2">Bank Details</h3>
-                  <p className="text-sm text-gray-400">
-                    Account: {financialProfile?.bank?.accountNumberMasked || 'Not set'}
-                  </p>
-                  <p className="text-sm text-gray-400">
-                    IFSC: {financialProfile?.bank?.ifsc || 'Not set'}
-                  </p>
-                  <p className="text-sm text-gray-400">
-                    Holder: {financialProfile?.bank?.holderName || 'Not set'}
-                  </p>
-                  {!financialProfile?.bank?.isVerified && (
-                    <p className="text-yellow-500 text-sm mt-2">
-                      ⚠️ Bank details not verified. Please update in Profile.
-                    </p>
-                  )}
+                <div className={`p-4 rounded-lg border-2 ${
+                  financialProfile?.bank?.isVerified 
+                    ? 'border-green-500/50 bg-green-500/10' 
+                    : 'border-yellow-500/50 bg-yellow-500/10'
+                }`}>
+                  <div className="flex items-start gap-3 mb-3">
+                    {financialProfile?.bank?.isVerified ? (
+                      <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={20} />
+                    ) : (
+                      <AlertCircle className="text-yellow-500 flex-shrink-0 mt-0.5" size={20} />
+                    )}
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-white mb-2">Bank Details</h3>
+                      <div className="space-y-1 text-sm">
+                        <p className="text-gray-300">
+                          <span className="text-gray-400">Account:</span> {financialProfile?.bank?.accountNumberMasked || 'Not set'}
+                        </p>
+                        <p className="text-gray-300">
+                          <span className="text-gray-400">IFSC:</span> {financialProfile?.bank?.ifsc || 'Not set'}
+                        </p>
+                        <p className="text-gray-300">
+                          <span className="text-gray-400">Holder:</span> {financialProfile?.bank?.holderName || 'Not set'}
+                        </p>
+                      </div>
+                      {!financialProfile?.bank?.isVerified && (
+                        <p className="text-yellow-500 text-sm mt-3">
+                          ⚠️ Bank details not verified. Please update in Profile.
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
               {method === 'upi' && (
-                <div className="p-4 bg-dark-lighter rounded-lg">
-                  <h3 className="font-semibold mb-2">UPI Details</h3>
-                  <p className="text-sm text-gray-400">
-                    UPI ID: {financialProfile?.upi?.upiId || 'Not set'}
-                  </p>
-                  {!financialProfile?.upi?.upiId && (
-                    <p className="text-yellow-500 text-sm mt-2">
-                      ⚠️ UPI ID not set. Please update in Profile.
-                    </p>
-                  )}
+                <div className={`p-4 rounded-lg border-2 ${
+                  financialProfile?.upi?.upiId 
+                    ? 'border-green-500/50 bg-green-500/10' 
+                    : 'border-yellow-500/50 bg-yellow-500/10'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    {financialProfile?.upi?.upiId ? (
+                      <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={20} />
+                    ) : (
+                      <AlertCircle className="text-yellow-500 flex-shrink-0 mt-0.5" size={20} />
+                    )}
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-white mb-2">UPI Details</h3>
+                      <p className="text-sm text-gray-300">
+                        <span className="text-gray-400">UPI ID:</span> {financialProfile?.upi?.upiId || 'Not set'}
+                      </p>
+                      {!financialProfile?.upi?.upiId && (
+                        <p className="text-yellow-500 text-sm mt-3">
+                          ⚠️ UPI ID not set. Please update in Profile.
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium mb-2">
+                <label className="block text-sm font-medium mb-2 text-white">
                   Withdrawal Amount <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -244,31 +324,33 @@ export default function UserWithdraw() {
                     min: { value: config.minWithdrawal, message: `Minimum withdrawal is ${formatCurrency(config.minWithdrawal, 'INR')}` },
                     max: { value: config.maxWithdrawal || 1000000, message: `Maximum withdrawal is ${formatCurrency(config.maxWithdrawal || 1000000, 'INR')}` }
                   })}
-                  className="input-field"
+                  className="input-field text-lg"
                   placeholder="Enter amount"
                 />
                 {errors.amount && (
                   <p className="text-red-500 text-sm mt-1">{errors.amount.message}</p>
                 )}
-                <p className="text-gray-400 text-xs mt-1">
-                  Min: {formatCurrency(config.minWithdrawal, 'INR')} | 
-                  Max: {formatCurrency(config.maxWithdrawal || 1000000, 'INR')}
+                <p className="text-gray-400 text-xs mt-2">
+                  Min: {formatCurrency(config.minWithdrawal, 'INR')} | Max: {formatCurrency(config.maxWithdrawal || 1000000, 'INR')}
                 </p>
               </div>
 
               {amount && parseFloat(amount) > 0 && (
-                <div className="p-4 bg-dark-lighter rounded-lg space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Amount:</span>
-                    <span className="font-semibold">{formatCurrency(parseFloat(amount), 'INR')}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Admin Charges ({config.feePercent}%):</span>
-                    <span className="text-red-500">-{formatCurrency(feeAmount, 'INR')}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-gray-700">
-                    <span className="font-semibold">Net Amount:</span>
-                    <span className="font-bold text-primary">{formatCurrency(netAmount, 'INR')}</span>
+                <div className="p-6 bg-dark-lighter rounded-lg space-y-3 border border-gray-700">
+                  <h3 className="font-semibold text-white mb-4">Withdrawal Summary</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Withdrawal Amount:</span>
+                      <span className="font-semibold text-white text-lg">{formatCurrency(parseFloat(amount), 'INR')}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Admin Charges ({config.feePercent}%):</span>
+                      <span className="text-red-400 font-semibold">-{formatCurrency(feeAmount, 'INR')}</span>
+                    </div>
+                    <div className="pt-3 border-t border-gray-700 flex justify-between items-center">
+                      <span className="font-semibold text-white text-lg">Net Amount You'll Receive:</span>
+                      <span className="font-bold text-primary text-xl">{formatCurrency(netAmount, 'INR')}</span>
+                    </div>
                   </div>
                 </div>
               )}
@@ -276,36 +358,66 @@ export default function UserWithdraw() {
               <button
                 type="submit"
                 disabled={checking}
-                className="w-full btn-primary"
+                className="w-full btn-primary py-4 text-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {checking ? 'Processing...' : 'Submit Withdrawal Request'}
+                {checking ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <ArrowUpCircle size={20} />
+                    Submit Withdrawal Request
+                  </>
+                )}
               </button>
             </form>
           </div>
         </div>
 
-        <div>
+        {/* Information Sidebar */}
+        <div className="space-y-6">
           <div className="card">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <AlertCircle className="text-primary" size={24} />
+              <Info className="text-primary" size={24} />
               Important Notes
             </h2>
-            <div className="space-y-3 text-sm text-gray-400">
-              <p>• Withdrawals are processed weekly (Monday release)</p>
-              <p>• Cutoff time: Friday 5:00 PM</p>
-              <p>• Admin charges: {config.feePercent}%</p>
-              <p>• Minimum withdrawal: {formatCurrency(config.minWithdrawal, 'INR')}</p>
+            <div className="space-y-4">
+              <div className="p-3 bg-dark-lighter rounded-lg">
+                <p className="text-white font-medium mb-1">Processing Schedule</p>
+                <p className="text-gray-400 text-sm">Withdrawals are processed weekly (Monday release)</p>
+                <p className="text-gray-400 text-sm">Cutoff time: Friday 5:00 PM</p>
+              </div>
+              <div className="p-3 bg-dark-lighter rounded-lg">
+                <p className="text-white font-medium mb-1">Fees</p>
+                <p className="text-gray-400 text-sm">Admin charges: {config.feePercent}%</p>
+                <p className="text-gray-400 text-sm">Minimum: {formatCurrency(config.minWithdrawal, 'INR')}</p>
+              </div>
               {config.requireKyc && (
-                <p className="text-yellow-500">• KYC verification required</p>
+                <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                  <p className="text-yellow-500 text-sm font-medium">⚠️ KYC verification required</p>
+                </div>
               )}
               {config.requireBankVerified && (
-                <p className="text-yellow-500">• Bank details must be verified</p>
+                <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                  <p className="text-yellow-500 text-sm font-medium">⚠️ Bank details must be verified</p>
+                </div>
               )}
             </div>
+          </div>
+
+          <div className="card bg-gradient-to-br from-primary/5 to-transparent border-primary/20">
+            <h3 className="font-semibold text-white mb-3">Need Help?</h3>
+            <p className="text-gray-400 text-sm mb-3">
+              If you have questions about withdrawals, contact our support team.
+            </p>
+            <a href="/app/support" className="text-primary hover:underline text-sm font-medium">
+              Contact Support →
+            </a>
           </div>
         </div>
       </div>
     </div>
   )
 }
-

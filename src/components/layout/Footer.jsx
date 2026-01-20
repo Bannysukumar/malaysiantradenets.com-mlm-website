@@ -14,7 +14,11 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div>
-            <h3 className="text-xl font-bold text-primary mb-4">MTN</h3>
+            <img 
+              src="https://malaysiantrade.net/assets/logo-DRFcCaVQ.png" 
+              alt="Malaysian Trade Net Logo" 
+              className="h-10 w-auto mb-4"
+            />
             <p className="text-gray-400 text-sm">
               Reflecting on Success, Paving the Path Forward.
             </p>

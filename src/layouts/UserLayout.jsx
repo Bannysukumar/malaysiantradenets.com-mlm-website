@@ -72,13 +72,17 @@ export default function UserLayout() {
     <div className="min-h-screen bg-dark">
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-64 bg-dark-light min-h-screen border-r border-gray-800 p-4">
+        <aside className="w-64 bg-dark-light min-h-screen border-r border-gray-800 p-6 sticky top-0 h-screen overflow-y-auto">
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-primary">MTN</h1>
+            <img 
+              src="https://malaysiantrade.net/assets/logo-DRFcCaVQ.png" 
+              alt="Malaysian Trade Net Logo" 
+              className="h-10 w-auto mb-2"
+            />
             <p className="text-sm text-gray-400">Member Portal</p>
           </div>
           
-          <nav className="space-y-2">
+          <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon
               const isActive = location.pathname === item.path
@@ -86,14 +90,14 @@ export default function UserLayout() {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
                     isActive
-                      ? 'bg-primary text-white'
-                      : 'text-gray-300 hover:bg-dark-lighter'
+                      ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                      : 'text-gray-300 hover:bg-dark-lighter hover:text-white'
                   }`}
                 >
-                  <Icon size={20} />
-                  <span>{item.label}</span>
+                  <Icon size={20} className={isActive ? 'text-white' : 'text-gray-400'} />
+                  <span className="font-medium">{item.label}</span>
                 </Link>
               )
             })}
@@ -103,17 +107,21 @@ export default function UserLayout() {
               <div>
                 <button
                   onClick={() => setExpandedMyTeam(!expandedMyTeam)}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 ${
                     location.pathname.startsWith('/app/my-team')
-                      ? 'bg-primary text-white'
-                      : 'text-gray-300 hover:bg-dark-lighter'
+                      ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                      : 'text-gray-300 hover:bg-dark-lighter hover:text-white'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <Users size={20} />
-                    <span>My Team</span>
+                    <Users size={20} className={location.pathname.startsWith('/app/my-team') ? 'text-white' : 'text-gray-400'} />
+                    <span className="font-medium">My Team</span>
                   </div>
-                  {expandedMyTeam ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+                  {expandedMyTeam ? (
+                    <ChevronDown size={18} className={location.pathname.startsWith('/app/my-team') ? 'text-white' : 'text-gray-400'} />
+                  ) : (
+                    <ChevronRight size={18} className={location.pathname.startsWith('/app/my-team') ? 'text-white' : 'text-gray-400'} />
+                  )}
                 </button>
 
                 {expandedMyTeam && (
@@ -121,9 +129,9 @@ export default function UserLayout() {
                     {isMyDirectEnabled && (
                       <Link
                         to="/app/my-team/my-direct"
-                        className={`block px-4 py-2 rounded-lg transition-colors ${
+                        className={`block px-4 py-2 rounded-lg transition-all duration-200 ${
                           location.pathname === '/app/my-team/my-direct'
-                            ? 'bg-primary text-white'
+                            ? 'bg-primary/20 text-white border-l-2 border-primary'
                             : 'text-gray-400 hover:text-white hover:bg-dark-lighter'
                         }`}
                       >
@@ -133,9 +141,9 @@ export default function UserLayout() {
                     {isLevelReportEnabled && (
                       <Link
                         to="/app/my-team/level-report"
-                        className={`block px-4 py-2 rounded-lg transition-colors ${
+                        className={`block px-4 py-2 rounded-lg transition-all duration-200 ${
                           location.pathname === '/app/my-team/level-report'
-                            ? 'bg-primary text-white'
+                            ? 'bg-primary/20 text-white border-l-2 border-primary'
                             : 'text-gray-400 hover:text-white hover:bg-dark-lighter'
                         }`}
                       >
@@ -151,20 +159,19 @@ export default function UserLayout() {
           <div className="mt-8 pt-8 border-t border-gray-800">
             <button
               onClick={logout}
-              className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-dark-lighter w-full"
+              className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-red-500/10 hover:text-red-400 w-full transition-all duration-200"
             >
               <LogOut size={20} />
-              <span>Logout</span>
+              <span className="font-medium">Logout</span>
             </button>
           </div>
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 p-8">
+        <main className="flex-1 p-6 md:p-8">
           <Outlet />
         </main>
       </div>
     </div>
   )
 }
-

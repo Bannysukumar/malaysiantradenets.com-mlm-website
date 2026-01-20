@@ -538,6 +538,7 @@ export default function AdminUsers() {
                   />
                 </th>
                 <th className="text-left py-4 px-4 font-semibold">Name</th>
+                <th className="text-left py-4 px-4 font-semibold">User ID</th>
                 <th className="text-left py-4 px-4 font-semibold">Email</th>
                 <th className="text-left py-4 px-4 font-semibold">Phone</th>
                 <th className="text-left py-4 px-4 font-semibold">Ref Code</th>

@@ -279,7 +279,9 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
     <div className="card">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold flex items-center gap-2">
-          <Building2 size={24} />
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <Building2 className="text-primary" size={24} />
+          </div>
           Bank Account Information
         </h2>
         <button
@@ -301,7 +303,7 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
             })
             setBankDetails({ bankName: '', branch: '', city: '' })
           }}
-          className="btn-primary"
+          className="btn-primary hover:bg-primary/90 transition-colors"
         >
           Add Bank / UPI
         </button>
@@ -315,11 +317,11 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
       {banks.length > 0 && (
         <div className="space-y-4 mb-6">
           {banks.map((bank) => (
-            <div key={bank.id} className="p-4 bg-dark-lighter rounded-lg border border-gray-700">
+            <div key={bank.id} className="p-4 bg-dark-lighter rounded-lg border border-gray-700 hover:border-primary/50 transition-colors">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="font-semibold">
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    <h3 className="font-semibold text-white">
                       {bank.paymentType === 'bank' ? 'Bank Account' : 'UPI'}
                     </h3>
                     {bank.isPrimary && (
@@ -333,42 +335,42 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
                   </div>
 
                   {bank.paymentType === 'bank' ? (
-                    <div className="space-y-1 text-sm">
+                    <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-400">Account Holder:</span>
-                        <span>{bank.holderName}</span>
+                        <span className="text-white font-medium">{bank.holderName}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-400">Account Number:</span>
-                        <span className="font-mono">{bank.accountNumberMasked || `XXXXXX${bank.accountNumberLast4 || 'XXXX'}`}</span>
+                        <span className="font-mono text-white">{bank.accountNumberMasked || `XXXXXX${bank.accountNumberLast4 || 'XXXX'}`}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-400">IFSC:</span>
-                        <span className="font-mono">{bank.ifsc}</span>
+                        <span className="font-mono text-white">{bank.ifsc}</span>
                       </div>
                       {bank.bankName && (
                         <div className="flex justify-between">
                           <span className="text-gray-400">Bank:</span>
-                          <span>{bank.bankName}</span>
+                          <span className="text-white">{bank.bankName}</span>
                         </div>
                       )}
                       {bank.branch && (
                         <div className="flex justify-between">
                           <span className="text-gray-400">Branch:</span>
-                          <span>{bank.branch}</span>
+                          <span className="text-white">{bank.branch}</span>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="space-y-1 text-sm">
+                    <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-400">UPI ID:</span>
-                        <span>{bank.upiId}</span>
+                        <span className="text-white font-medium">{bank.upiId}</span>
                       </div>
                       {bank.upiName && (
                         <div className="flex justify-between">
                           <span className="text-gray-400">UPI Name:</span>
-                          <span>{bank.upiName}</span>
+                          <span className="text-white">{bank.upiName}</span>
                         </div>
                       )}
                     </div>
@@ -379,20 +381,20 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
                   {!bank.isPrimary && (
                     <button
                       onClick={() => handleSetPrimary(bank.id)}
-                      className="btn-secondary text-sm"
+                      className="btn-secondary text-sm hover:bg-primary/20 transition-colors"
                     >
                       Set Primary
                     </button>
                   )}
                   <button
                     onClick={() => handleEditBank(bank)}
-                    className="btn-secondary text-sm"
+                    className="btn-secondary text-sm hover:bg-primary/20 transition-colors"
                   >
                     <Edit size={16} />
                   </button>
                   <button
                     onClick={() => handleDeleteBank(bank.id)}
-                    className="btn-danger text-sm"
+                    className="btn-danger text-sm hover:bg-red-600 transition-colors"
                     disabled={bank.isPrimary}
                   >
                     <Trash2 size={16} />
@@ -559,7 +561,7 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
             </div>
 
             <div className="flex gap-2">
-              <button type="submit" className="btn-primary">
+              <button type="submit" className="btn-primary hover:bg-primary/90 transition-colors">
                 {editingBankId ? 'Update' : 'Save'}
               </button>
               <button
@@ -570,7 +572,7 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
                   bankForm.reset()
                   setBankDetails({ bankName: '', branch: '', city: '' })
                 }}
-                className="btn-secondary"
+                className="btn-secondary hover:bg-dark-lighter transition-colors"
               >
                 Cancel
               </button>
@@ -979,22 +981,31 @@ export default function UserProfile() {
   }
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-8">Profile</h1>
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent flex items-center gap-3">
+          <User className="text-primary" size={36} />
+          My Profile
+        </h1>
+        <p className="text-gray-400">Manage your account settings and personal information</p>
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* User Settings Card - Top Right */}
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1 space-y-6">
           <div className="card">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <User size={24} />
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <User className="text-primary" size={24} />
+              </div>
               User Settings
             </h2>
             
             <div className="space-y-4">
               {/* User ID */}
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-400">User ID</label>
+                <label className="block text-sm font-medium mb-2 text-white">User ID</label>
                 <div className="relative">
                   <input
                     type="text"
@@ -1006,7 +1017,7 @@ export default function UserProfile() {
                     <button
                       type="button"
                       onClick={() => copyToClipboard(userData.userId, 'User ID')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary transition-colors"
                     >
                       {copiedField === 'User ID' ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
                     </button>
@@ -1016,7 +1027,7 @@ export default function UserProfile() {
 
               {/* Sponsor ID */}
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-400">Sponsor ID / Referral ID</label>
+                <label className="block text-sm font-medium mb-2 text-white">Sponsor ID / Referral ID</label>
                 <div className="relative">
                   <input
                     type="text"
@@ -1028,7 +1039,7 @@ export default function UserProfile() {
                     <button
                       type="button"
                       onClick={() => copyToClipboard(sponsorId, 'Sponsor ID')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary transition-colors"
                     >
                       {copiedField === 'Sponsor ID' ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
                     </button>
@@ -1038,7 +1049,7 @@ export default function UserProfile() {
 
               {/* Referral Link */}
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-400">Referral Link</label>
+                <label className="block text-sm font-medium mb-2 text-white">Referral Link</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -1049,15 +1060,15 @@ export default function UserProfile() {
                   <button
                     type="button"
                     onClick={() => copyToClipboard(referralLink, 'Referral Link')}
-                    className="btn-secondary px-3"
+                    className="btn-secondary px-3 hover:bg-primary/20 transition-colors"
                     title="Copy"
                   >
-                    {copiedField === 'Referral Link' ? <Check size={18} /> : <Copy size={18} />}
+                    {copiedField === 'Referral Link' ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
                   </button>
                   <button
                     type="button"
                     onClick={shareReferralLink}
-                    className="btn-secondary px-3"
+                    className="btn-secondary px-3 hover:bg-primary/20 transition-colors"
                     title="Share"
                   >
                     <Share2 size={18} />
@@ -1067,25 +1078,25 @@ export default function UserProfile() {
 
               {/* Program Type */}
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-400">Program Type</label>
+                <label className="block text-sm font-medium mb-2 text-white">Program Type</label>
                 <div>{getProgramTypeBadge()}</div>
               </div>
 
               {/* Account Status */}
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-400">Account Status</label>
+                <label className="block text-sm font-medium mb-2 text-white">Account Status</label>
                 <div>{getAccountStatusBadge()}</div>
               </div>
 
               {/* KYC Status */}
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-400">KYC Status</label>
-                <div className="flex items-center gap-2">
+                <label className="block text-sm font-medium mb-2 text-white">KYC Status</label>
+                <div className="flex items-center gap-2 flex-wrap">
                   {getKycStatusBadge()}
                   {(!userKycRequest || userKycRequest.status === 'rejected') && (
                     <button
                       onClick={() => setActiveTab('kyc')}
-                      className="btn-primary text-sm px-3 py-1"
+                      className="btn-primary text-sm px-3 py-1.5 hover:bg-primary/90 transition-colors"
                     >
                       Submit KYC
                     </button>
@@ -1095,7 +1106,7 @@ export default function UserProfile() {
 
               {/* Activation Date */}
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-400">Activation Date</label>
+                <label className="block text-sm font-medium mb-2 text-white">Activation Date</label>
                 <input
                   type="text"
                   value={activePackage?.activatedAt ? formatDate(activePackage.activatedAt) : 'Not Activated'}
@@ -1106,8 +1117,8 @@ export default function UserProfile() {
 
               {/* Plan/Package */}
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-400">Plan/Package</label>
-                <div className="space-y-1">
+                <label className="block text-sm font-medium mb-2 text-white">Plan/Package</label>
+                <div className="space-y-2">
                   <input
                     type="text"
                     value={activePackage?.packageName || 'No Active Package'}
@@ -1128,9 +1139,11 @@ export default function UserProfile() {
           </div>
 
           {/* Profile Photo Card */}
-          <div className="card mt-6">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Camera size={24} />
+          <div className="card">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <Camera className="text-primary" size={24} />
+              </div>
               Profile Photo
             </h2>
             <div className="flex flex-col items-center gap-4">
@@ -1139,15 +1152,20 @@ export default function UserProfile() {
                   <img
                     src={photoPreview || userData.photoURL}
                     alt="Profile"
-                    className="w-32 h-32 rounded-full object-cover border-2 border-primary"
+                    className="w-32 h-32 rounded-full object-cover border-4 border-primary shadow-lg shadow-primary/20"
                   />
                 ) : (
-                  <div className="w-32 h-32 rounded-full bg-dark-lighter flex items-center justify-center border-2 border-primary">
+                  <div className="w-32 h-32 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border-4 border-primary shadow-lg shadow-primary/20">
                     <User size={48} className="text-gray-400" />
                   </div>
                 )}
+                {uploadingPhoto && (
+                  <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
+                    <Loader2 className="animate-spin text-primary" size={24} />
+                  </div>
+                )}
               </div>
-              <label className="btn-secondary cursor-pointer">
+              <label className="btn-secondary cursor-pointer hover:bg-primary/10 transition-colors">
                 <Upload size={18} className="mr-2" />
                 {uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
                 <input
@@ -1171,50 +1189,50 @@ export default function UserProfile() {
             <div className="flex gap-2 border-b border-gray-700 overflow-x-auto">
               <button
                 onClick={() => setActiveTab('settings')}
-                className={`px-4 py-2 font-medium whitespace-nowrap ${
+                className={`px-4 py-3 font-medium whitespace-nowrap transition-all ${
                   activeTab === 'settings'
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-gray-400 hover:text-white'
+                    ? 'border-b-2 border-primary text-primary bg-primary/5'
+                    : 'text-gray-400 hover:text-white hover:bg-dark-lighter'
                 }`}
               >
                 Settings
               </button>
               <button
                 onClick={() => setActiveTab('address')}
-                className={`px-4 py-2 font-medium whitespace-nowrap ${
+                className={`px-4 py-3 font-medium whitespace-nowrap transition-all ${
                   activeTab === 'address'
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-gray-400 hover:text-white'
+                    ? 'border-b-2 border-primary text-primary bg-primary/5'
+                    : 'text-gray-400 hover:text-white hover:bg-dark-lighter'
                 }`}
               >
                 Address
               </button>
               <button
                 onClick={() => setActiveTab('bank')}
-                className={`px-4 py-2 font-medium whitespace-nowrap ${
+                className={`px-4 py-3 font-medium whitespace-nowrap transition-all ${
                   activeTab === 'bank'
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-gray-400 hover:text-white'
+                    ? 'border-b-2 border-primary text-primary bg-primary/5'
+                    : 'text-gray-400 hover:text-white hover:bg-dark-lighter'
                 }`}
               >
                 Bank Accounts
               </button>
               <button
                 onClick={() => setActiveTab('kyc')}
-                className={`px-4 py-2 font-medium whitespace-nowrap ${
+                className={`px-4 py-3 font-medium whitespace-nowrap transition-all ${
                   activeTab === 'kyc'
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-gray-400 hover:text-white'
+                    ? 'border-b-2 border-primary text-primary bg-primary/5'
+                    : 'text-gray-400 hover:text-white hover:bg-dark-lighter'
                 }`}
               >
                 KYC Verification
               </button>
               <button
                 onClick={() => setActiveTab('security')}
-                className={`px-4 py-2 font-medium whitespace-nowrap ${
+                className={`px-4 py-3 font-medium whitespace-nowrap transition-all ${
                   activeTab === 'security'
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-gray-400 hover:text-white'
+                    ? 'border-b-2 border-primary text-primary bg-primary/5'
+                    : 'text-gray-400 hover:text-white hover:bg-dark-lighter'
                 }`}
               >
                 Security
@@ -1226,13 +1244,15 @@ export default function UserProfile() {
           {activeTab === 'settings' && (
             <div className="card">
               <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-                <User size={24} />
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <User className="text-primary" size={24} />
+                </div>
                 Personal Information
               </h2>
               <form onSubmit={personalForm.handleSubmit(onPersonalSubmit)} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-2">Full Name</label>
+                    <label className="block text-sm font-medium mb-2 text-white">Full Name <span className="text-red-500">*</span></label>
                     <input
                       type="text"
                       {...personalForm.register('name', { required: 'Name is required' })}
@@ -1241,7 +1261,7 @@ export default function UserProfile() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium mb-2">Email</label>
+                    <label className="block text-sm font-medium mb-2 text-white">Email</label>
                     <input
                       type="email"
                       value={user?.email || ''}
@@ -1252,7 +1272,7 @@ export default function UserProfile() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium mb-2">Mobile Number</label>
+                    <label className="block text-sm font-medium mb-2 text-white">Mobile Number</label>
                     <input
                       type="tel"
                       {...personalForm.register('phone')}
@@ -1262,7 +1282,7 @@ export default function UserProfile() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium mb-2">Date of Birth</label>
+                    <label className="block text-sm font-medium mb-2 text-white">Date of Birth</label>
                     <input
                       type="date"
                       {...personalForm.register('dateOfBirth')}
@@ -1271,7 +1291,7 @@ export default function UserProfile() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium mb-2">Gender</label>
+                    <label className="block text-sm font-medium mb-2 text-white">Gender</label>
                     <select {...personalForm.register('gender')} className="input-field">
                       <option value="">Select Gender</option>
                       <option value="male">Male</option>
@@ -1340,23 +1360,25 @@ export default function UserProfile() {
                   </div>
                 </div>
 
-                <button type="submit" className="btn-primary">
+                <button type="submit" className="btn-primary w-full md:w-auto px-6 py-3 font-semibold hover:bg-primary/90 transition-colors">
                   Update Personal Details
                 </button>
               </form>
             </div>
           )}
 
-          {/* Address Tab - Continue in next part due to length */}
+          {/* Address Tab */}
           {activeTab === 'address' && (
             <div className="card">
               <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-                <MapPin size={24} />
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <MapPin className="text-primary" size={24} />
+                </div>
                 Address Information
               </h2>
               <form onSubmit={addressForm.handleSubmit(onAddressSubmit)} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Address Line 1 *</label>
+                  <label className="block text-sm font-medium mb-2 text-white">Address Line 1 <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     {...addressForm.register('addressLine1', { required: 'Address Line 1 is required' })}
@@ -1366,7 +1388,7 @@ export default function UserProfile() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Address Line 2</label>
+                  <label className="block text-sm font-medium mb-2 text-white">Address Line 2</label>
                   <input
                     type="text"
                     {...addressForm.register('addressLine2')}
@@ -1376,7 +1398,7 @@ export default function UserProfile() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Landmark</label>
+                  <label className="block text-sm font-medium mb-2 text-white">Landmark</label>
                   <input
                     type="text"
                     {...addressForm.register('landmark')}
@@ -1387,7 +1409,7 @@ export default function UserProfile() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-2">District *</label>
+                    <label className="block text-sm font-medium mb-2 text-white">District <span className="text-red-500">*</span></label>
                     <input
                       type="text"
                       {...addressForm.register('district', { required: 'District is required' })}
@@ -1396,7 +1418,7 @@ export default function UserProfile() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium mb-2">City</label>
+                    <label className="block text-sm font-medium mb-2 text-white">City</label>
                     <input
                       type="text"
                       {...addressForm.register('city')}
@@ -1405,7 +1427,7 @@ export default function UserProfile() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium mb-2">State</label>
+                    <label className="block text-sm font-medium mb-2 text-white">State</label>
                     <input
                       type="text"
                       {...addressForm.register('state')}
@@ -1415,7 +1437,7 @@ export default function UserProfile() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Pin Code</label>
+                  <label className="block text-sm font-medium mb-2 text-white">Pin Code</label>
                   <input
                     type="text"
                     {...addressForm.register('pinCode')}
@@ -1425,7 +1447,7 @@ export default function UserProfile() {
                   />
                 </div>
 
-                <button type="submit" className="btn-primary">
+                <button type="submit" className="btn-primary w-full md:w-auto px-6 py-3 font-semibold hover:bg-primary/90 transition-colors">
                   Update Address
                 </button>
               </form>
@@ -1446,27 +1468,29 @@ export default function UserProfile() {
           {activeTab === 'kyc' && (
             <div className="card">
               <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-                <FileCheck size={24} />
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <FileCheck className="text-primary" size={24} />
+                </div>
                 KYC Verification
               </h2>
 
               {userKycRequest && (
                 <div className="mb-6 p-4 bg-dark-lighter rounded-lg border border-gray-700">
-                  <h3 className="font-semibold mb-2">Current KYC Status</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
+                  <h3 className="font-semibold mb-3 text-white">Current KYC Status</h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
                       <span className="text-gray-400">Status:</span>
                       {getKycStatusBadge()}
                     </div>
                     {userKycRequest.submittedAt && (
-                      <div className="flex justify-between">
+                      <div className="flex justify-between items-center">
                         <span className="text-gray-400">Submitted:</span>
-                        <span>{formatDate(userKycRequest.submittedAt)}</span>
+                        <span className="text-white">{formatDate(userKycRequest.submittedAt)}</span>
                       </div>
                     )}
                     {userKycRequest.status === 'rejected' && userKycRequest.adminRemarks && (
-                      <div>
-                        <span className="text-gray-400">Admin Remarks:</span>
+                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                        <span className="text-gray-400 text-sm">Admin Remarks:</span>
                         <p className="text-red-400 mt-1">{userKycRequest.adminRemarks}</p>
                       </div>
                     )}
@@ -1478,7 +1502,7 @@ export default function UserProfile() {
                 <form onSubmit={kycForm.handleSubmit(onKycSubmit)} className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium mb-2">PAN Number *</label>
+                      <label className="block text-sm font-medium mb-2 text-white">PAN Number <span className="text-red-500">*</span></label>
                       <input
                         type="text"
                         {...kycForm.register('panNumber', { 
@@ -1495,7 +1519,7 @@ export default function UserProfile() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-2">Aadhar / Govt ID Number</label>
+                      <label className="block text-sm font-medium mb-2 text-white">Aadhar / Govt ID Number</label>
                       <input
                         type="text"
                         {...kycForm.register('aadharNumber')}
@@ -1508,11 +1532,11 @@ export default function UserProfile() {
 
                   {/* Document Uploads */}
                   <div className="space-y-4">
-                    <h3 className="font-semibold">Upload Documents</h3>
+                    <h3 className="font-semibold text-white mb-4">Upload Documents</h3>
                     
                     <div>
-                      <label className="block text-sm font-medium mb-2">PAN Image *</label>
-                      <label className="btn-secondary cursor-pointer inline-flex items-center gap-2">
+                      <label className="block text-sm font-medium mb-2 text-white">PAN Image <span className="text-red-500">*</span></label>
+                      <label className="btn-secondary cursor-pointer inline-flex items-center gap-2 hover:bg-primary/10 transition-colors">
                         <Upload size={18} />
                         {kycDocuments.panImage ? kycDocuments.panImage.name : 'Upload PAN Image'}
                         <input
@@ -1523,13 +1547,16 @@ export default function UserProfile() {
                         />
                       </label>
                       {kycDocuments.panImage && (
-                        <p className="text-sm text-gray-400 mt-1">{kycDocuments.panImage.name}</p>
+                        <p className="text-sm text-gray-400 mt-2 flex items-center gap-2">
+                          <CheckCircle size={16} className="text-green-500" />
+                          {kycDocuments.panImage.name}
+                        </p>
                       )}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-2">Aadhar Front / ID Proof</label>
-                      <label className="btn-secondary cursor-pointer inline-flex items-center gap-2">
+                      <label className="block text-sm font-medium mb-2 text-white">Aadhar Front / ID Proof</label>
+                      <label className="btn-secondary cursor-pointer inline-flex items-center gap-2 hover:bg-primary/10 transition-colors">
                         <Upload size={18} />
                         {kycDocuments.aadharFront ? kycDocuments.aadharFront.name : 'Upload Aadhar Front'}
                         <input
@@ -1540,13 +1567,16 @@ export default function UserProfile() {
                         />
                       </label>
                       {kycDocuments.aadharFront && (
-                        <p className="text-sm text-gray-400 mt-1">{kycDocuments.aadharFront.name}</p>
+                        <p className="text-sm text-gray-400 mt-2 flex items-center gap-2">
+                          <CheckCircle size={16} className="text-green-500" />
+                          {kycDocuments.aadharFront.name}
+                        </p>
                       )}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-2">Aadhar Back</label>
-                      <label className="btn-secondary cursor-pointer inline-flex items-center gap-2">
+                      <label className="block text-sm font-medium mb-2 text-white">Aadhar Back</label>
+                      <label className="btn-secondary cursor-pointer inline-flex items-center gap-2 hover:bg-primary/10 transition-colors">
                         <Upload size={18} />
                         {kycDocuments.aadharBack ? kycDocuments.aadharBack.name : 'Upload Aadhar Back'}
                         <input
@@ -1557,13 +1587,16 @@ export default function UserProfile() {
                         />
                       </label>
                       {kycDocuments.aadharBack && (
-                        <p className="text-sm text-gray-400 mt-1">{kycDocuments.aadharBack.name}</p>
+                        <p className="text-sm text-gray-400 mt-2 flex items-center gap-2">
+                          <CheckCircle size={16} className="text-green-500" />
+                          {kycDocuments.aadharBack.name}
+                        </p>
                       )}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-2">Selfie (Optional)</label>
-                      <label className="btn-secondary cursor-pointer inline-flex items-center gap-2">
+                      <label className="block text-sm font-medium mb-2 text-white">Selfie (Optional)</label>
+                      <label className="btn-secondary cursor-pointer inline-flex items-center gap-2 hover:bg-primary/10 transition-colors">
                         <Upload size={18} />
                         {kycDocuments.selfie ? kycDocuments.selfie.name : 'Upload Selfie'}
                         <input
@@ -1574,12 +1607,15 @@ export default function UserProfile() {
                         />
                       </label>
                       {kycDocuments.selfie && (
-                        <p className="text-sm text-gray-400 mt-1">{kycDocuments.selfie.name}</p>
+                        <p className="text-sm text-gray-400 mt-2 flex items-center gap-2">
+                          <CheckCircle size={16} className="text-green-500" />
+                          {kycDocuments.selfie.name}
+                        </p>
                       )}
                     </div>
                   </div>
 
-                  <button type="submit" className="btn-primary">
+                  <button type="submit" className="btn-primary w-full md:w-auto px-6 py-3 font-semibold hover:bg-primary/90 transition-colors">
                     Submit KYC Request
                   </button>
                 </form>
@@ -1591,23 +1627,25 @@ export default function UserProfile() {
           {activeTab === 'security' && (
             <div className="card">
               <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-                <Lock size={24} />
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Lock className="text-primary" size={24} />
+                </div>
                 Security Settings
               </h2>
 
               {/* Last Login Info */}
               <div className="mb-6 p-4 bg-dark-lighter rounded-lg border border-gray-700">
-                <h3 className="font-semibold mb-3">Login Information</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
+                <h3 className="font-semibold mb-4 text-white">Login Information</h3>
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between items-center">
                     <span className="text-gray-400">Last Login:</span>
-                    <span>{user?.metadata?.lastSignInTime ? formatDate(new Date(user.metadata.lastSignInTime)) : 'N/A'}</span>
+                    <span className="text-white">{user?.metadata?.lastSignInTime ? formatDate(new Date(user.metadata.lastSignInTime)) : 'N/A'}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center">
                     <span className="text-gray-400">Account Created:</span>
-                    <span>{user?.metadata?.creationTime ? formatDate(new Date(user.metadata.creationTime)) : 'N/A'}</span>
+                    <span className="text-white">{user?.metadata?.creationTime ? formatDate(new Date(user.metadata.creationTime)) : 'N/A'}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center">
                     <span className="text-gray-400">Email Verified:</span>
                     <span>{user?.emailVerified ? (
                       <span className="text-green-500 flex items-center gap-1">
@@ -1622,10 +1660,10 @@ export default function UserProfile() {
 
               {/* Change Password */}
               <div className="mb-6">
-                <h3 className="font-semibold mb-4">Change Password</h3>
+                <h3 className="font-semibold mb-4 text-white">Change Password</h3>
                 <form onSubmit={passwordForm.handleSubmit(onChangePassword)} className="space-y-6">
                   <div>
-                    <label className="block text-sm font-medium mb-2">Current Password</label>
+                    <label className="block text-sm font-medium mb-2 text-white">Current Password <span className="text-red-500">*</span></label>
                     <input
                       type="password"
                       {...passwordForm.register('currentPassword', { required: 'Current password is required' })}
@@ -1635,7 +1673,7 @@ export default function UserProfile() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium mb-2">New Password</label>
+                    <label className="block text-sm font-medium mb-2 text-white">New Password <span className="text-red-500">*</span></label>
                     <input
                       type="password"
                       {...passwordForm.register('newPassword', { 
@@ -1651,7 +1689,7 @@ export default function UserProfile() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium mb-2">Confirm New Password</label>
+                    <label className="block text-sm font-medium mb-2 text-white">Confirm New Password <span className="text-red-500">*</span></label>
                     <input
                       type="password"
                       {...passwordForm.register('confirmNewPassword', { required: 'Please confirm new password' })}
@@ -1660,7 +1698,7 @@ export default function UserProfile() {
                     />
                   </div>
 
-                  <button type="submit" className="btn-primary">
+                  <button type="submit" className="btn-primary w-full md:w-auto px-6 py-3 font-semibold hover:bg-primary/90 transition-colors">
                     Change Password
                   </button>
                 </form>
@@ -1668,10 +1706,10 @@ export default function UserProfile() {
 
               {/* Logout All Devices */}
               <div className="border-t border-gray-700 pt-6">
-                <h3 className="font-semibold mb-4">Device Management</h3>
-                <div className="p-4 bg-yellow-500/10 border border-yellow-500 rounded-lg mb-4">
-                  <p className="text-sm text-yellow-500 mb-2">
-                    <AlertCircle size={16} className="inline mr-2" />
+                <h3 className="font-semibold mb-4 text-white">Device Management</h3>
+                <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mb-4">
+                  <p className="text-sm text-yellow-500 flex items-start gap-2">
+                    <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
                     Logging out from all devices will invalidate all active sessions. You'll need to login again on all devices.
                   </p>
                 </div>
@@ -1689,7 +1727,7 @@ export default function UserProfile() {
                       toast.error('Error logging out from all devices')
                     }
                   }}
-                  className="btn-secondary"
+                  className="btn-secondary hover:bg-red-500/10 hover:text-red-400 transition-colors"
                 >
                   Logout All Devices
                 </button>
