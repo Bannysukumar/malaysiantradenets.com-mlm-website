@@ -37,6 +37,7 @@ import UserActivationHistory from './pages/user/ActivationHistory'
 import UserRenewal from './pages/user/Renewal'
 import UserBankDetailsOnboarding from './pages/user/BankDetailsOnboarding'
 import UserChooseProgram from './pages/user/ChooseProgram'
+import UserLevelTree from './pages/user/LevelTree'
 
 // Admin
 import AdminLogin from './pages/admin/Login'
@@ -52,6 +53,7 @@ import AdminTerms from './pages/admin/Terms'
 import AdminContact from './pages/admin/Contact'
 import AdminUsers from './pages/admin/Users'
 import AdminUserDetails from './pages/admin/UserDetails'
+import AdminLevelTree from './pages/admin/LevelTree'
 import AdminWallets from './pages/admin/Wallets'
 import AdminWithdrawals from './pages/admin/Withdrawals'
 import AdminWithdrawalSettings from './pages/admin/WithdrawalSettings'
@@ -112,6 +114,7 @@ function AppRoutes() {
         <Route path="choose-program" element={<UserChooseProgram />} />
         <Route path="notifications" element={<UserNotifications />} />
         <Route path="support" element={<UserSupport />} />
+        <Route path="level-tree" element={<UserLevelTree />} />
       </Route>
 
       {/* Admin routes */}
@@ -129,6 +132,7 @@ function AppRoutes() {
         <Route path="contact" element={<AdminContact />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="users/:uid" element={<AdminUserDetails />} />
+        <Route path="level-tree" element={<AdminLevelTree />} />
         <Route path="wallets" element={<AdminWallets />} />
         <Route path="withdrawals" element={<AdminWithdrawals />} />
         <Route path="withdrawal-settings" element={<AdminWithdrawalSettings />} />

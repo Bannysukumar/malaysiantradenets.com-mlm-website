@@ -9,7 +9,7 @@ import { useForm } from 'react-hook-form'
 import { 
   ArrowLeft, User, Wallet, CreditCard, History, TrendingUp, 
   Users, FileText, Shield, Ban, Package, Edit, Download,
-  CheckCircle, XCircle, AlertCircle, RefreshCw
+  CheckCircle, XCircle, AlertCircle, RefreshCw, Copy, Check
 } from 'lucide-react'
 import { formatDate, formatCurrency } from '../../utils/helpers'
 import { useAuth } from '../../contexts/AuthContext'
@@ -308,6 +308,17 @@ export default function UserDetails() {
 
 // Overview Tab Component
 function OverviewTab({ userData, activePackage, uplineUser, directsList, walletData, onResetRefCode }) {
+  const [copiedUserId, setCopiedUserId] = useState(false)
+  
+  const copyUserId = () => {
+    if (userData?.userId) {
+      navigator.clipboard.writeText(userData.userId)
+      setCopiedUserId(true)
+      toast.success('User ID copied to clipboard!')
+      setTimeout(() => setCopiedUserId(false), 2000)
+    }
+  }
+  
   return (
     <div className="space-y-6">
       {/* Profile Section */}
@@ -317,6 +328,25 @@ function OverviewTab({ userData, activePackage, uplineUser, directsList, walletD
           <div>
             <label className="text-sm text-gray-400">Name</label>
             <p className="text-lg">{userData.name || 'N/A'}</p>
+          </div>
+          <div>
+            <label className="text-sm text-gray-400">User ID</label>
+            <div className="flex items-center gap-2">
+              <p className="text-lg font-mono">{userData.userId || <span className="text-gray-500">Generating...</span>}</p>
+              {userData.userId && (
+                <button
+                  onClick={copyUserId}
+                  className="text-gray-400 hover:text-primary transition-colors"
+                  title="Copy User ID"
+                >
+                  {copiedUserId ? (
+                    <Check size={16} className="text-green-500" />
+                  ) : (
+                    <Copy size={16} />
+                  )}
+                </button>
+              )}
+            </div>
           </div>
           <div>
             <label className="text-sm text-gray-400">Email</label>

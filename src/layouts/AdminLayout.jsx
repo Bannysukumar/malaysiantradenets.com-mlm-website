@@ -20,7 +20,8 @@ import {
   Clock,
   Target,
   UserCog,
-  Calendar
+  Calendar,
+  TreePine
 } from 'lucide-react'
 
 export default function AdminLayout() {
@@ -39,6 +40,7 @@ export default function AdminLayout() {
     { path: '/admin/terms', icon: FileCheck, label: 'Terms' },
     { path: '/admin/contact', icon: Phone, label: 'Contact' },
     { path: '/admin/users', icon: Users, label: 'Users' },
+    { path: '/admin/level-tree', icon: TreePine, label: 'Level Tree' },
     { path: '/admin/wallets', icon: Wallet, label: 'Wallets' },
     { path: '/admin/withdrawals', icon: ArrowUpCircle, label: 'Withdrawals' },
     { path: '/admin/transfers', icon: DollarSign, label: 'Transfers' },

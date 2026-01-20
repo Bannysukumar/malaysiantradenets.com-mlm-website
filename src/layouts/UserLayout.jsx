@@ -17,7 +17,8 @@ import {
   Send,
   History,
   UserPlus,
-  RefreshCw
+  RefreshCw,
+  TreePine
 } from 'lucide-react'
 
 export default function UserLayout() {
@@ -30,6 +31,7 @@ export default function UserLayout() {
     { path: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/app/packages', icon: Package, label: 'Packages' },
     { path: '/app/referrals', icon: Users, label: 'Referrals' },
+    { path: '/app/level-tree', icon: TreePine, label: 'Level Tree' },
     { path: '/app/wallet', icon: Wallet, label: 'Wallet' },
     { path: '/app/income-history', icon: DollarSign, label: 'Income History' },
     { path: '/app/withdraw', icon: ArrowUpCircle, label: 'Withdraw' },

@@ -2695,22 +2695,25 @@ exports.getUserDownlineTree = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
+  const { userId, maxDepth = 5 } = data;
+  const requestingUid = context.auth.uid;
+
   // Check if user is admin
-  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
-  if (!adminDoc.exists) {
+  const userDoc = await db.collection('users').doc(requestingUid).get();
+  if (!userDoc.exists) {
     throw new functions.https.HttpsError('permission-denied', 'User not found');
   }
 
-  const adminData = adminDoc.data();
-  const isAdmin = adminData.role === 'admin' || adminData.role === 'superAdmin' || 
+  const userData = userDoc.data();
+  const isAdmin = userData.role === 'admin' || userData.role === 'superAdmin' || 
                   context.auth.token.admin === true || context.auth.token.superAdmin === true;
 
-  if (!isAdmin) {
-    throw new functions.https.HttpsError('permission-denied', 'Only admins can view downline tree');
+  // Allow if admin OR if requesting own tree
+  if (!isAdmin && userId !== requestingUid) {
+    throw new functions.https.HttpsError('permission-denied', 'You can only view your own downline tree');
   }
 
   try {
-    const { userId, maxDepth = 5 } = data;
 
     if (!userId) {
       throw new functions.https.HttpsError('invalid-argument', 'User ID is required');
@@ -2747,10 +2750,16 @@ exports.getUserDownlineTree = functions.https.onCall(async (data, context) => {
         .where('referredByUid', '==', currentUserId)
         .get();
 
+      // Show full email for admins, masked for regular users (isAdmin is from outer scope)
+      const emailDisplay = userData.email ? (isAdmin ? userData.email : userData.email.replace(/(.{2})(.*)(@.*)/, '$1***$3')) : 'N/A';
+      
       const node = {
         uid: currentUserId,
         name: userData.name || 'N/A',
-        email: userData.email ? userData.email.replace(/(.{2})(.*)(@.*)/, '$1***$3') : 'N/A', // Mask email
+        email: emailDisplay,
+        userId: userData.userId || null,
+        programType: userData.programType || null,
+        packageName: activePackage ? activePackage.packageName : 'None',
         plan: activePackage ? activePackage.packageName : 'None',
         status: userData.status || 'active',
         walletAvailable: walletData.availableBalance || 0,
@@ -2790,25 +2799,28 @@ exports.getUserDownlineList = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
+  const requestingUid = context.auth.uid;
+  
   // Check if user is admin
-  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
-  if (!adminDoc.exists) {
+  const userDoc = await db.collection('users').doc(requestingUid).get();
+  if (!userDoc.exists) {
     throw new functions.https.HttpsError('permission-denied', 'User not found');
   }
 
-  const adminData = adminDoc.data();
-  const isAdmin = adminData.role === 'admin' || adminData.role === 'superAdmin' || 
+  const userData = userDoc.data();
+  const isAdmin = userData.role === 'admin' || userData.role === 'superAdmin' || 
                   context.auth.token.admin === true || context.auth.token.superAdmin === true;
-
-  if (!isAdmin) {
-    throw new functions.https.HttpsError('permission-denied', 'Only admins can view downline list');
-  }
 
   try {
     const { userId, limit = 100, startAfter = null, filters = {} } = data;
 
     if (!userId) {
       throw new functions.https.HttpsError('invalid-argument', 'User ID is required');
+    }
+
+    // Allow if admin OR if requesting own downline
+    if (!isAdmin && userId !== requestingUid) {
+      throw new functions.https.HttpsError('permission-denied', 'You can only view your own downline list');
     }
 
     // Recursive function to get all downline
@@ -2840,13 +2852,19 @@ exports.getUserDownlineList = functions.https.onCall(async (data, context) => {
 
         if (filters.plan && activePackage?.packageName !== filters.plan) continue;
 
+        // Show full email for admins, masked for regular users
+        const emailDisplay = userData.email ? (isAdmin ? userData.email : userData.email.replace(/(.{2})(.*)(@.*)/, '$1***$3')) : 'N/A';
+        
         collected.push({
           uid: doc.id,
           name: userData.name || 'N/A',
-          email: userData.email ? userData.email.replace(/(.{2})(.*)(@.*)/, '$1***$3') : 'N/A',
+          email: emailDisplay,
+          userId: userData.userId || null,
+          programType: userData.programType || null,
           phone: userData.phone ? userData.phone.replace(/(.{2})(.*)(.{2})/, '$1***$3') : 'N/A',
           level: currentDepth,
           plan: activePackage ? activePackage.packageName : 'None',
+          packageName: activePackage ? activePackage.packageName : 'None',
           activationDate: activePackage?.activatedAt || null,
           walletAvailable: walletData.availableBalance || 0,
           totalEarned: walletData.lifetimeEarned || 0,
@@ -2945,6 +2963,37 @@ exports.onUserCreated = functions.firestore
     try {
       const userData = snap.data();
       const userId = context.params.userId;
+
+      // Generate User ID if missing
+      if (!userData.userId || !userData.userId.startsWith('MTN')) {
+        try {
+          const { userId: mtnUserId, userIdLower } = await generateUniqueUserId();
+          const email = userData.email || '';
+          const emailLower = email.toLowerCase();
+          
+          // Update user document and create index
+          await db.runTransaction(async (transaction) => {
+            const userRef = db.collection('users').doc(userId);
+            const indexRef = db.collection('userIdIndex').doc(mtnUserId);
+            
+            transaction.update(userRef, {
+              userId: mtnUserId,
+              userIdLower: userIdLower,
+              emailLower: emailLower
+            });
+            
+            // Store email in index for login lookup (avoids permission issues)
+            transaction.set(indexRef, {
+              uid: userId,
+              email: email,
+              createdAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+          });
+        } catch (error) {
+          console.error('Error auto-generating User ID in onUserCreated:', error);
+          // Don't fail the entire function if User ID generation fails
+        }
+      }
 
       // If user has a referrer, update referrer's stats
       if (userData.referredByUid) {
@@ -3881,4 +3930,190 @@ exports.syncWalletBalances = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('internal', 'Error syncing wallet balances');
   }
 });
+
+// Helper function to generate unique MTN User ID
+async function generateUniqueUserId() {
+  const maxAttempts = 10;
+  let attempts = 0;
+  
+  while (attempts < maxAttempts) {
+    // Generate random 6-digit number (000000-999999)
+    const randomNum = Math.floor(Math.random() * 1000000);
+    const userId = `MTN${String(randomNum).padStart(6, '0')}`;
+    const userIdLower = userId.toLowerCase();
+    
+    // Check if userId already exists in index
+    const indexDoc = await db.collection('userIdIndex').doc(userId).get();
+    
+    if (!indexDoc.exists) {
+      // Reserve this userId using a transaction
+      const indexRef = db.collection('userIdIndex').doc(userId);
+      
+      try {
+        await db.runTransaction(async (transaction) => {
+          const indexSnapshot = await transaction.get(indexRef);
+          
+          if (!indexSnapshot.exists) {
+            // Reserve it temporarily (will be updated with actual uid)
+            transaction.set(indexRef, {
+              reserved: true,
+              reservedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            return userId;
+          } else {
+            throw new Error('UserId already exists');
+          }
+        });
+        
+        return { userId, userIdLower };
+      } catch (error) {
+        // If transaction failed, try again
+        attempts++;
+        continue;
+      }
+    }
+    
+    attempts++;
+  }
+  
+  throw new Error('Failed to generate unique User ID after maximum attempts');
+}
+
+// Generate MTN User ID for a user
+exports.generateUserId = functions.https.onCall(async (data, context) => {
+  try {
+    // Require authentication
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    
+    const uid = context.auth.uid;
+    
+    // Check if user already has a userId
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (!userDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'User document not found');
+    }
+    
+    const userData = userDoc.data();
+    if (userData.userId && userData.userId.startsWith('MTN')) {
+      return {
+        success: true,
+        userId: userData.userId,
+        message: 'User ID already exists'
+      };
+    }
+    
+    // Generate unique userId
+    const { userId, userIdLower } = await generateUniqueUserId();
+    
+    // Get user email for emailLower
+    const email = userData.email || context.auth.token.email || '';
+    const emailLower = email.toLowerCase();
+    
+    // Update user document and index in a transaction
+    await db.runTransaction(async (transaction) => {
+      const userRef = db.collection('users').doc(uid);
+      const indexRef = db.collection('userIdIndex').doc(userId);
+      
+      // Update user document
+      transaction.update(userRef, {
+        userId: userId,
+        userIdLower: userIdLower,
+        emailLower: emailLower
+      });
+      
+      // Update index with actual uid and email for login lookup
+      transaction.set(indexRef, {
+        uid: uid,
+        email: email,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    
+    return {
+      success: true,
+      userId: userId,
+      message: 'User ID generated successfully'
+    };
+    
+  } catch (error) {
+    console.error('Error generating User ID:', error);
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError('internal', 'Error generating User ID: ' + error.message);
+  }
+});
+
+// Ensure User ID exists (backfill for existing users)
+exports.ensureUserId = functions.https.onCall(async (data, context) => {
+  try {
+    // Require authentication
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    
+    const uid = context.auth.uid;
+    
+    // Check if user has userId
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (!userDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'User document not found');
+    }
+    
+    const userData = userDoc.data();
+    
+    // If userId already exists, return it
+    if (userData.userId && userData.userId.startsWith('MTN')) {
+      return {
+        success: true,
+        userId: userData.userId,
+        alreadyExists: true
+      };
+    }
+    
+    // Generate userId (reuse the logic)
+    const { userId, userIdLower } = await generateUniqueUserId();
+    
+    // Get user email for emailLower
+    const email = userData.email || context.auth.token.email || '';
+    const emailLower = email.toLowerCase();
+    
+    // Update user document and index in a transaction
+    await db.runTransaction(async (transaction) => {
+      const userRef = db.collection('users').doc(uid);
+      const indexRef = db.collection('userIdIndex').doc(userId);
+      
+      // Update user document
+      transaction.update(userRef, {
+        userId: userId,
+        userIdLower: userIdLower,
+        emailLower: emailLower
+      });
+      
+      // Update index with actual uid and email for login lookup
+      transaction.set(indexRef, {
+        uid: uid,
+        email: email,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    
+    return {
+      success: true,
+      userId: userId,
+      alreadyExists: false
+    };
+    
+  } catch (error) {
+    console.error('Error ensuring User ID:', error);
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError('internal', 'Error ensuring User ID: ' + error.message);
+  }
+});
+
+// Auto-generate User ID when user document is created (if missing)
 

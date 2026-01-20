@@ -261,6 +261,14 @@ service cloud.firestore {
       allow update: if isAdmin();
       allow delete: if isSuperAdmin();
     }
+
+    // User ID Index - public read (for login lookup), Cloud Functions and admin write
+    match /userIdIndex/{userId} {
+      allow read: if true; // Public read for login lookup
+      allow create: if true; // Cloud Functions can create
+      allow update: if true; // Cloud Functions can update
+      allow delete: if isSuperAdmin(); // Only superAdmin can delete
+    }
   }
 }
 

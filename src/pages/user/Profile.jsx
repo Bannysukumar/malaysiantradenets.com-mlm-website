@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { doc, setDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import toast from 'react-hot-toast'
-import { User, Mail, Hash, Phone, Building2, CreditCard, Shield, Lock, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { User, Mail, Hash, Phone, Building2, CreditCard, Shield, Lock, CheckCircle, XCircle, Loader2, Copy, Check } from 'lucide-react'
 import { useFirestore } from '../../hooks/useFirestore'
 import { validateIFSC, validateAccountNumber, validateUPI } from '../../utils/validation'
 import { fetchIFSCDetails } from '../../utils/ifscApi'
@@ -13,11 +13,21 @@ export default function UserProfile() {
   const { user, userData } = useAuth()
   const [activeTab, setActiveTab] = useState('personal')
   const [fetchingIFSC, setFetchingIFSC] = useState(false)
+  const [copiedUserId, setCopiedUserId] = useState(false)
   const [bankDetails, setBankDetails] = useState({
     bankName: '',
     branch: '',
     city: ''
   })
+  
+  const copyUserId = () => {
+    if (userData?.userId) {
+      navigator.clipboard.writeText(userData.userId)
+      setCopiedUserId(true)
+      toast.success('User ID copied to clipboard!')
+      setTimeout(() => setCopiedUserId(false), 2000)
+    }
+  }
 
   const userId = user?.uid
   const financialProfileRef = userId ? doc(db, 'userFinancialProfiles', userId) : null
@@ -295,6 +305,38 @@ export default function UserProfile() {
                 className="input-field bg-dark-lighter opacity-50 cursor-not-allowed"
               />
               <p className="text-sm text-gray-400 mt-1">Email cannot be changed</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2 flex items-center gap-2">
+                <Hash size={16} />
+                User ID
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={userData?.userId || 'Generating...'}
+                  disabled
+                  className="input-field bg-dark-lighter opacity-50 cursor-not-allowed pr-10"
+                />
+                {userData?.userId && (
+                  <button
+                    type="button"
+                    onClick={copyUserId}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary transition-colors"
+                    title="Copy User ID"
+                  >
+                    {copiedUserId ? (
+                      <Check size={18} className="text-green-500" />
+                    ) : (
+                      <Copy size={18} />
+                    )}
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-gray-400 mt-1">
+                Your unique User ID. Use this to login instead of email.
+              </p>
             </div>
 
             <div>

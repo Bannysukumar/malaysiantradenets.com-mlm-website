@@ -55,12 +55,12 @@ export default function AdminLogin() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">Email</label>
+              <label className="block text-sm font-medium mb-2">Email or User ID</label>
               <input
-                type="email"
+                type="text"
                 {...register('email', { required: true })}
                 className="input-field"
-                placeholder="admin@example.com"
+                placeholder="admin@example.com or MTNxxxxxx"
               />
             </div>
 

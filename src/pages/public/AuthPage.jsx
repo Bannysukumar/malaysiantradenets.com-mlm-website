@@ -119,8 +119,16 @@ export default function AuthPage() {
           return
         }
         
-        await signUp(data.email, data.password, data.name, data.phone, data.referralCode || null)
+        const result = await signUp(data.email, data.password, data.name, data.phone, data.referralCode || null)
         toast.success('Account created! Please check your email for verification.')
+        
+        // Show User ID if available
+        if (result && result.userId) {
+          setTimeout(() => {
+            toast.success(`Your User ID: ${result.userId}`, { duration: 5000 })
+          }, 1000)
+        }
+        
         // Navigation handled by useEffect
       }
     } catch (error) {
@@ -242,15 +250,30 @@ export default function AuthPage() {
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-2">Email</label>
+              <label className="block text-sm font-medium mb-2">
+                {isLogin ? 'Email or User ID' : 'Email'}
+              </label>
               <input
-                type="email"
+                type={isLogin ? 'text' : 'email'}
                 {...register('email', { 
-                  required: 'Email is required',
-                  validate: (value) => validateEmail(value) || true
+                  required: isLogin ? 'Email or User ID is required' : 'Email is required',
+                  validate: (value) => {
+                    if (isLogin) {
+                      // For login, accept email or User ID
+                      if (value.includes('@')) {
+                        return validateEmail(value) || true
+                      } else if (value.toUpperCase().startsWith('MTN')) {
+                        return true
+                      }
+                      return 'Please enter a valid email or User ID (MTNxxxxxx)'
+                    } else {
+                      // For signup, only accept email
+                      return validateEmail(value) || true
+                    }
+                  }
                 })}
                 className="input-field"
-                placeholder="Enter your email"
+                placeholder={isLogin ? "Enter your email or User ID (MTNxxxxxx)" : "Enter your email"}
               />
               {errors.email && (
                 <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>

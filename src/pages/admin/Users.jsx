@@ -109,8 +109,11 @@ export default function AdminUsers() {
       const matchesSearch = !searchTerm || 
         user.name?.toLowerCase().includes(searchLower) ||
         user.email?.toLowerCase().includes(searchLower) ||
+        user.emailLower?.toLowerCase().includes(searchLower) ||
         user.phone?.toLowerCase().includes(searchLower) ||
         user.refCode?.toLowerCase().includes(searchLower) ||
+        user.userId?.toLowerCase().includes(searchLower) ||
+        user.userIdLower?.toLowerCase().includes(searchLower) ||
         user.id?.toLowerCase().includes(searchLower)
 
       if (!matchesSearch) return false
@@ -219,12 +222,13 @@ export default function AdminUsers() {
   }
 
   const handleExportCSV = () => {
-    const headers = ['Name', 'Email', 'Phone', 'Ref Code', 'Program Type', 'Status', 'Plan', 'Wallet Available', 'Directs', 'KYC', 'Bank', 'Created']
+    const headers = ['Name', 'User ID', 'Email', 'Phone', 'Ref Code', 'Program Type', 'Status', 'Plan', 'Wallet Available', 'Directs', 'KYC', 'Bank', 'Created']
     const rows = filteredUsers.map(user => {
       const wallet = walletMap[user.id] || {}
       const pkg = packageMap[user.id]
       return [
         user.name || 'N/A',
+        user.userId || 'N/A',
         user.email || 'N/A',
         user.phone || 'N/A',
         user.refCode || 'N/A',
@@ -299,7 +303,7 @@ export default function AdminUsers() {
             <Search className="text-gray-400" size={20} />
             <input
               type="text"
-              placeholder="Search by name, email, phone, ref code, UID..."
+              placeholder="Search by name, email, phone, User ID, ref code, UID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="input-field flex-1"
@@ -505,6 +509,9 @@ export default function AdminUsers() {
                       />
                     </td>
                     <td className="py-4 px-4">{user.name || 'N/A'}</td>
+                    <td className="py-4 px-4 font-mono text-sm">
+                      {user.userId || <span className="text-gray-500">Generating...</span>}
+                    </td>
                     <td className="py-4 px-4">{user.email}</td>
                     <td className="py-4 px-4">{user.phone || 'N/A'}</td>
                     <td className="py-4 px-4 font-mono text-sm">{user.refCode}</td>
