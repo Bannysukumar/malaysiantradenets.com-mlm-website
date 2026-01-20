@@ -11,7 +11,7 @@ import { formatDate, formatCurrency } from '../../utils/helpers'
 import { useAuth } from '../../contexts/AuthContext'
 
 export default function BankVerification() {
-  const { userData } = useAuth()
+  const { user, userData } = useAuth()
   const { data: users, loading: usersLoading } = useCollection('users', [])
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -174,7 +174,12 @@ export default function BankVerification() {
 
   const handleApprove = async () => {
     if (!selectedBank) return
+    if (!user?.uid) {
+      toast.error('User authentication required')
+      return
+    }
 
+    const adminUid = user.uid // Store after validation check
     setProcessing(true)
     try {
       if (selectedBank.source === 'subcollection') {
@@ -183,7 +188,7 @@ export default function BankVerification() {
         await updateDoc(bankRef, {
           isVerified: true,
           verifiedAt: new Date(),
-          verifiedBy: userData.uid,
+          verifiedBy: adminUid,
           adminRemarks: adminRemarks || null,
           updatedAt: new Date(),
         })
@@ -201,7 +206,7 @@ export default function BankVerification() {
               ...profileData.bank,
               isVerified: true,
               verifiedAt: new Date(),
-              verifiedBy: userData.uid,
+              verifiedBy: adminUid,
               adminRemarks: adminRemarks || null,
             }
           } else if (selectedBank.paymentType === 'upi' && profileData.upi) {
@@ -209,7 +214,7 @@ export default function BankVerification() {
               ...profileData.upi,
               isVerified: true,
               verifiedAt: new Date(),
-              verifiedBy: userData.uid,
+              verifiedBy: adminUid,
               adminRemarks: adminRemarks || null,
             }
           }
@@ -242,12 +247,17 @@ export default function BankVerification() {
 
   const handleReject = async () => {
     if (!selectedBank) return
+    if (!user?.uid) {
+      toast.error('User authentication required')
+      return
+    }
 
     if (!adminRemarks.trim()) {
       toast.error('Please provide a reason for rejection')
       return
     }
 
+    const adminUid = user.uid // Store after validation check
     setProcessing(true)
     try {
       if (selectedBank.source === 'subcollection') {
@@ -256,7 +266,7 @@ export default function BankVerification() {
         await updateDoc(bankRef, {
           isVerified: false,
           rejectedAt: new Date(),
-          rejectedBy: userData.uid,
+          rejectedBy: adminUid,
           adminRemarks: adminRemarks,
           updatedAt: new Date(),
         })
@@ -274,7 +284,7 @@ export default function BankVerification() {
               ...profileData.bank,
               isVerified: false,
               rejectedAt: new Date(),
-              rejectedBy: userData.uid,
+              rejectedBy: adminUid,
               adminRemarks: adminRemarks,
             }
           } else if (selectedBank.paymentType === 'upi' && profileData.upi) {
@@ -282,7 +292,7 @@ export default function BankVerification() {
               ...profileData.upi,
               isVerified: false,
               rejectedAt: new Date(),
-              rejectedBy: userData.uid,
+              rejectedBy: adminUid,
               adminRemarks: adminRemarks,
             }
           }

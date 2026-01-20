@@ -11,7 +11,7 @@ import { formatDate } from '../../utils/helpers'
 import { useAuth } from '../../contexts/AuthContext'
 
 export default function KYCManagement() {
-  const { userData, isSuperAdmin } = useAuth()
+  const { user, userData, isSuperAdmin } = useAuth()
   const { data: kycRequests, loading } = useCollection('kycRequests', [])
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -57,7 +57,12 @@ export default function KYCManagement() {
 
   const handleApprove = async () => {
     if (!selectedKyc) return
+    if (!user?.uid) {
+      toast.error('User authentication required')
+      return
+    }
 
+    const adminUid = user.uid // Store after validation check
     setProcessing(true)
     try {
       const kycRef = doc(db, 'kycRequests', selectedKyc.id)
@@ -66,7 +71,7 @@ export default function KYCManagement() {
       await updateDoc(kycRef, {
         status: 'approved',
         approvedAt: new Date(),
-        approvedBy: userData.uid,
+        approvedBy: adminUid,
         adminRemarks: adminRemarks || null,
       })
 
@@ -91,12 +96,17 @@ export default function KYCManagement() {
 
   const handleReject = async () => {
     if (!selectedKyc) return
+    if (!user?.uid) {
+      toast.error('User authentication required')
+      return
+    }
 
     if (!adminRemarks.trim()) {
       toast.error('Please provide a reason for rejection')
       return
     }
 
+    const adminUid = user.uid // Store after validation check
     setProcessing(true)
     try {
       const kycRef = doc(db, 'kycRequests', selectedKyc.id)
@@ -105,7 +115,7 @@ export default function KYCManagement() {
       await updateDoc(kycRef, {
         status: 'rejected',
         rejectedAt: new Date(),
-        rejectedBy: userData.uid,
+        rejectedBy: adminUid,
         adminRemarks: adminRemarks,
       })
 
