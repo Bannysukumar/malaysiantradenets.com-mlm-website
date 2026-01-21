@@ -75,7 +75,15 @@ export default function UserDashboard() {
           <h1 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
             Welcome back, {userData?.name || 'Member'}!
           </h1>
-          <p className="text-gray-400">Here's your account overview</p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <p className="text-gray-400">Here's your account overview</p>
+            {userData?.userId && (
+              <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/30 rounded-lg">
+                <span className="text-xs text-gray-400">User ID:</span>
+                <span className="text-sm font-mono font-bold text-primary">{userData.userId}</span>
+              </div>
+            )}
+          </div>
         </div>
         <div className="hidden md:flex items-center gap-2 text-sm text-gray-400">
           <Sparkles size={16} className="text-primary" />

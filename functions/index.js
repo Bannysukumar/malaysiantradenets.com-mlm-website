@@ -403,9 +403,9 @@ async function updateUserWallet(userId, amount, type, description, metadata = {}
   return { newBalance, transactionId, ledgerEntryId };
 }
 
-// Daily ROI Distribution - Runs every day at 9 AM UTC
-exports.distributeDailyROI = functions.pubsub.schedule('0 9 * * 1-5')
-  .timeZone('UTC')
+// Daily ROI Distribution - Runs every day at 12 AM IST (midnight)
+exports.distributeDailyROI = functions.pubsub.schedule('0 0 * * 1-5')
+  .timeZone('Asia/Kolkata')
   .onRun(async () => {
     console.log('Starting daily ROI distribution...');
     
