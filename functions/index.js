@@ -2977,9 +2977,12 @@ exports.onUserCreated = functions.firestore
       const userId = context.params.userId;
 
       // Generate User ID if missing
+      let mtnUserId = userData.userId;
       if (!userData.userId || !userData.userId.startsWith('MTN')) {
         try {
-          const { userId: mtnUserId, userIdLower } = await generateUniqueUserId();
+          const generated = await generateUniqueUserId();
+          mtnUserId = generated.userId;
+          const userIdLower = generated.userIdLower;
           const email = userData.email || '';
           const emailLower = email.toLowerCase();
           
@@ -2991,7 +2994,8 @@ exports.onUserCreated = functions.firestore
             transaction.update(userRef, {
               userId: mtnUserId,
               userIdLower: userIdLower,
-              emailLower: emailLower
+              emailLower: emailLower,
+              refCode: mtnUserId // Set referral code to User ID
             });
             
             // Store email in index for login lookup (avoids permission issues)
@@ -3004,6 +3008,17 @@ exports.onUserCreated = functions.firestore
         } catch (error) {
           console.error('Error auto-generating User ID in onUserCreated:', error);
           // Don't fail the entire function if User ID generation fails
+        }
+      } else {
+        // User already has User ID, ensure refCode matches it
+        if (!userData.refCode || userData.refCode !== mtnUserId) {
+          try {
+            await db.collection('users').doc(userId).update({
+              refCode: mtnUserId
+            });
+          } catch (error) {
+            console.error('Error updating refCode to match User ID:', error);
+          }
         }
       }
 
@@ -4516,6 +4531,90 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
       throw error;
     }
     throw new functions.https.HttpsError('internal', 'Error deleting user: ' + error.message);
+  }
+});
+
+// Migrate existing users' referral codes to match their User IDs
+exports.migrateReferralCodesToUserId = functions.https.onCall(async (data, context) => {
+  try {
+    // Require admin authentication
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    
+    const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+    if (!adminDoc.exists || adminDoc.data().role !== 'admin') {
+      throw new functions.https.HttpsError('permission-denied', 'Only admins can run this migration');
+    }
+    
+    console.log('Starting referral code migration...');
+    
+    // Get all users
+    const usersSnapshot = await db.collection('users').get();
+    let updated = 0;
+    let skipped = 0;
+    let errors = 0;
+    
+    const batch = db.batch();
+    let batchCount = 0;
+    const BATCH_SIZE = 500; // Firestore batch limit
+    
+    for (const userDoc of usersSnapshot.docs) {
+      const userData = userDoc.data();
+      const userId = userDoc.id;
+      const mtnUserId = userData.userId;
+      
+      // Skip if user doesn't have a User ID (MTN format)
+      if (!mtnUserId || !mtnUserId.startsWith('MTN')) {
+        skipped++;
+        continue;
+      }
+      
+      // Skip if refCode already matches User ID
+      if (userData.refCode === mtnUserId) {
+        skipped++;
+        continue;
+      }
+      
+      // Update refCode to match User ID
+      const userRef = db.collection('users').doc(userId);
+      batch.update(userRef, {
+        refCode: mtnUserId
+      });
+      batchCount++;
+      updated++;
+      
+      // Commit batch if it reaches the limit
+      if (batchCount >= BATCH_SIZE) {
+        await batch.commit();
+        batchCount = 0;
+        console.log(`Processed ${updated} users...`);
+      }
+    }
+    
+    // Commit remaining updates
+    if (batchCount > 0) {
+      await batch.commit();
+    }
+    
+    console.log(`Migration completed: ${updated} updated, ${skipped} skipped, ${errors} errors`);
+    
+    return {
+      success: true,
+      message: 'Referral code migration completed',
+      stats: {
+        updated,
+        skipped,
+        errors,
+        total: usersSnapshot.size
+      }
+    };
+  } catch (error) {
+    console.error('Error in migrateReferralCodesToUserId:', error);
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError('internal', 'Error migrating referral codes: ' + error.message);
   }
 });
 

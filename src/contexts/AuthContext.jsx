@@ -12,7 +12,6 @@ import {
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { auth, db, functions } from '../config/firebase'
-import { generateRefCode } from '../utils/helpers'
 import toast from 'react-hot-toast'
 
 const AuthContext = createContext()
@@ -73,11 +72,11 @@ export function AuthProvider({ children }) {
           setUserData(userDataFromFirestore)
         } else {
           // Create user document if it doesn't exist
-          const refCode = generateRefCode()
+          // refCode will be set to User ID in onUserCreated Cloud Function
           const userData = {
             name: firebaseUser.displayName || '',
             email: firebaseUser.email,
-            refCode,
+            emailLower: firebaseUser.email ? firebaseUser.email.toLowerCase().trim() : '',
             createdAt: serverTimestamp(),
             status: 'active',
             role: 'user',
@@ -153,6 +152,9 @@ export function AuthProvider({ children }) {
       // Registration is FREE - no payment required
       // Referral code is optional (only for hierarchy mapping, no income)
       
+      // Normalize email to lowercase for storage consistency
+      const normalizedEmail = email.toLowerCase().trim()
+      
       let referredByUid = null
       let refCodeUsed = null
       
@@ -173,8 +175,8 @@ export function AuthProvider({ children }) {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
       await updateProfile(userCredential.user, { displayName: name })
       
-      // Generate ref code for new user
-      const newRefCode = generateRefCode()
+      // Referral code will be set to User ID in onUserCreated Cloud Function
+      // Don't generate a separate referral code
       
       const userId = userCredential.user.uid
       
@@ -194,8 +196,9 @@ export function AuthProvider({ children }) {
       const userData = {
         name,
         email,
+        emailLower: normalizedEmail, // Store lowercase email for duplicate checking
         phone: phone.replace(/[\s\-\(\)]/g, ''), // Clean phone number
-        refCode: newRefCode,
+        // refCode will be set to User ID in onUserCreated Cloud Function
         referredByUid: referredByUid, // Optional - only for hierarchy
         refCodeUsed: refCodeUsed, // Optional
         createdAt: serverTimestamp(),
