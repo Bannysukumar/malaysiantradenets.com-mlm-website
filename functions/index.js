@@ -2426,7 +2426,7 @@ exports.processRenewal = functions.https.onCall(async (data, context) => {
   }
 
   try {
-    const { targetUid, renewalPlanId, renewalMethod, paymentReference, notes, sponsorUid } = data;
+    const { targetUid, renewalPlanId, renewalMethod, paymentReference, notes, sponsorUid, paymentId, orderId, signature } = data;
 
     if (!targetUid || !renewalMethod) {
       throw new functions.https.HttpsError('invalid-argument', 'Missing required fields');
@@ -2549,6 +2549,15 @@ exports.processRenewal = functions.https.onCall(async (data, context) => {
       });
     }
 
+    // For gateway_payment, payment is already completed via Razorpay
+    // Just verify that payment details are provided
+    if (renewalMethod === 'gateway_payment') {
+      if (!paymentId || !orderId || !signature) {
+        throw new functions.https.HttpsError('invalid-argument', 'Payment details are required for gateway payment');
+      }
+      // Payment already processed via Razorpay, no wallet deduction needed
+    }
+
     // Create renewal record
     const renewalId = `renewal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     await db.collection('renewals').doc(renewalId).set({
@@ -2560,6 +2569,9 @@ exports.processRenewal = functions.https.onCall(async (data, context) => {
       method: renewalMethod,
       status: 'completed',
       paymentReference: paymentReference || null,
+      paymentId: renewalMethod === 'gateway_payment' ? paymentId : null,
+      orderId: renewalMethod === 'gateway_payment' ? orderId : null,
+      signature: renewalMethod === 'gateway_payment' ? signature : null,
       sponsorUid: renewalMethod === 'sponsor_wallet' ? sponsorUid : null,
       adminUid: isAdmin ? performerUid : null,
       performedBy: performerUid,

@@ -42,22 +42,66 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
   // Load banks from subcollection
   useEffect(() => {
     const loadBanks = async () => {
+      if (!userId) return
+      
       try {
         const banksRef = collection(db, 'userFinancialProfiles', userId, 'banks')
         const snapshot = await getDocs(banksRef)
         const banksList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-        setBanks(banksList)
+        
+        // If subcollection has banks, use them
+        if (banksList.length > 0) {
+          setBanks(banksList)
+        } else {
+          // Fallback to legacy structure if subcollection is empty
+          const legacyBanks = []
+          if (financialProfile?.bank && financialProfile.bank.holderName) {
+            legacyBanks.push({ 
+              id: 'default', 
+              ...financialProfile.bank, 
+              paymentType: 'bank',
+              isPrimary: true,
+              isVerified: financialProfile.bank.isVerified || false
+            })
+          }
+          if (financialProfile?.upi && financialProfile.upi.upiId) {
+            legacyBanks.push({ 
+              id: 'default-upi', 
+              ...financialProfile.upi, 
+              paymentType: 'upi',
+              isPrimary: false,
+              isVerified: financialProfile.upi.isVerified || false
+            })
+          }
+          setBanks(legacyBanks)
+        }
       } catch (error) {
         console.error('Error loading banks:', error)
-        // Fallback to single bank in financialProfile
-        if (financialProfile?.bank) {
-          setBanks([{ id: 'default', ...financialProfile.bank, paymentType: 'bank' }])
+        // Fallback to single bank in financialProfile on error
+        const legacyBanks = []
+        if (financialProfile?.bank && financialProfile.bank.holderName) {
+          legacyBanks.push({ 
+            id: 'default', 
+            ...financialProfile.bank, 
+            paymentType: 'bank',
+            isPrimary: true,
+            isVerified: financialProfile.bank.isVerified || false
+          })
         }
+        if (financialProfile?.upi && financialProfile.upi.upiId) {
+          legacyBanks.push({ 
+            id: 'default-upi', 
+            ...financialProfile.upi, 
+            paymentType: 'upi',
+            isPrimary: false,
+            isVerified: financialProfile.upi.isVerified || false
+          })
+        }
+        setBanks(legacyBanks)
       }
     }
-    if (userId) {
-      loadBanks()
-    }
+    
+    loadBanks()
   }, [userId, financialProfile])
 
   const handleFetchIFSC = async () => {
@@ -187,10 +231,15 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
       setBankDetails({ bankName: '', branch: '', city: '' })
       
       // Reload banks
-      const banksRef = collection(db, 'userFinancialProfiles', userId, 'banks')
-      const snapshot = await getDocs(banksRef)
-      const banksList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-      setBanks(banksList)
+      try {
+        const banksRef = collection(db, 'userFinancialProfiles', userId, 'banks')
+        const snapshot = await getDocs(banksRef)
+        const banksList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        setBanks(banksList)
+      } catch (error) {
+        console.error('Error reloading banks:', error)
+        // Reload will happen via useEffect when financialProfile updates
+      }
     } catch (error) {
       console.error('Bank save error:', error)
       toast.error('Error saving bank details')
@@ -314,7 +363,7 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
       </p>
 
       {/* Existing Banks List */}
-      {banks.length > 0 && (
+      {banks.length > 0 ? (
         <div className="space-y-4 mb-6">
           {banks.map((bank) => (
             <div key={bank.id} className="p-4 bg-dark-lighter rounded-lg border border-gray-700 hover:border-primary/50 transition-colors">
@@ -327,10 +376,10 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
                     {bank.isPrimary && (
                       <span className="badge bg-primary">Primary</span>
                     )}
-                    {bank.isVerified ? (
+                    {bank.isVerified === true ? (
                       <span className="badge bg-green-500">Verified</span>
                     ) : (
-                      <span className="badge bg-yellow-500">Pending</span>
+                      <span className="badge bg-yellow-500">Pending Verification</span>
                     )}
                   </div>
 
@@ -403,6 +452,12 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
               </div>
             </div>
           ))}
+        </div>
+      ) : (
+        <div className="p-6 bg-dark-lighter rounded-lg border border-gray-700 text-center mb-6">
+          <CreditCard className="text-gray-500 mx-auto mb-3" size={48} />
+          <p className="text-gray-400 mb-2">No bank accounts or UPI added yet</p>
+          <p className="text-sm text-gray-500">Click "Add Bank / UPI" to add your payment method</p>
         </div>
       )}
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useCollection, useFirestore } from '../../hooks/useFirestore'
-import { doc } from 'firebase/firestore'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import toast from 'react-hot-toast'
@@ -9,6 +9,7 @@ import { useForm } from 'react-hook-form'
 import { RefreshCw, AlertCircle, Package, Wallet, CreditCard, CheckCircle } from 'lucide-react'
 import { formatCurrency } from '../../utils/helpers'
 import { Link } from 'react-router-dom'
+import { initiateRazorpayPayment } from '../../utils/razorpayPayment'
 
 export default function UserRenewal() {
   const { user, userData } = useAuth()
@@ -91,6 +92,92 @@ export default function UserRenewal() {
       return
     }
 
+    // If gateway payment, initiate Razorpay payment first
+    if (data.renewalMethod === 'gateway_payment') {
+      setProcessing(true)
+      try {
+        const contact = userData?.phone || userData?.phoneNumber || ''
+        
+        // Initiate Razorpay payment
+        await initiateRazorpayPayment({
+          amount: renewalAmount,
+          currency: 'INR',
+          name: userData?.name || userData?.displayName || 'User',
+          email: userData?.email,
+          contact: contact,
+          description: `Renewal payment for ${selectedPlan?.name || activePackage.packageName}`,
+          metadata: {
+            userId: userId,
+            renewalPlanId: data.renewalPlanId || activePackage.packageId,
+            cycleNumber: cycleNumber,
+            newCycleNumber: cycleNumber + 1,
+            type: 'renewal'
+          },
+          onSuccess: async (paymentResponse) => {
+            try {
+              // Create transaction record
+              const transactionId = `renewal_txn_${Date.now()}`
+              await setDoc(doc(db, 'transactions', transactionId), {
+                userId: userId,
+                packageId: data.renewalPlanId || activePackage.packageId,
+                packageName: selectedPlan?.name || activePackage.packageName,
+                amount: renewalAmount,
+                currency: 'INR',
+                type: 'renewal_payment',
+                status: 'completed',
+                paymentId: paymentResponse.razorpay_payment_id,
+                orderId: paymentResponse.razorpay_order_id,
+                signature: paymentResponse.razorpay_signature,
+                paymentMethod: 'razorpay',
+                cycleNumber: cycleNumber,
+                newCycleNumber: cycleNumber + 1,
+                createdAt: serverTimestamp(),
+              })
+
+              // Now process renewal with payment details
+              const functions = getFunctions()
+              const processRenewal = httpsCallable(functions, 'processRenewal')
+
+              const result = await processRenewal({
+                targetUid: userId,
+                renewalPlanId: data.renewalPlanId || activePackage.packageId,
+                renewalMethod: 'gateway_payment',
+                paymentId: paymentResponse.razorpay_payment_id,
+                orderId: paymentResponse.razorpay_order_id,
+                signature: paymentResponse.razorpay_signature,
+                notes: `User renewed via Razorpay payment. Payment ID: ${paymentResponse.razorpay_payment_id}`
+              })
+
+              if (result.data.success) {
+                toast.success('Renewal completed successfully!')
+                setTimeout(() => {
+                  window.location.href = '/app/dashboard'
+                }, 2000)
+              } else {
+                toast.error('Payment successful but renewal failed. Please contact support.')
+              }
+            } catch (error) {
+              console.error('Error processing renewal after payment:', error)
+              toast.error('Payment successful but error processing renewal. Please contact support with payment ID.')
+            } finally {
+              setProcessing(false)
+            }
+          },
+          onFailure: (error) => {
+            console.error('Payment failed:', error)
+            toast.error(error.message || 'Payment failed. Please try again.')
+            setProcessing(false)
+          }
+        })
+      } catch (error) {
+        console.error('Error initiating payment:', error)
+        toast.error('Error initiating payment. Please try again.')
+        setProcessing(false)
+      }
+      return
+    }
+
+    // For other payment methods (wallet, sponsor), process directly
     setProcessing(true)
     try {
       const functions = getFunctions()
@@ -104,7 +191,7 @@ export default function UserRenewal() {
       })
 
       if (result.data.success) {
-        toast.success('Renewal request submitted successfully!')
+        toast.success('Renewal completed successfully!')
         setTimeout(() => {
           window.location.href = '/app/dashboard'
         }, 2000)

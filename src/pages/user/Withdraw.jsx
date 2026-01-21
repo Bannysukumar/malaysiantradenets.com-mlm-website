@@ -17,6 +17,8 @@ export default function UserWithdraw() {
   const { data: withdrawalConfig } = useFirestore(doc(db, 'adminConfig', 'withdrawals'))
   const financialProfileRef = userId ? doc(db, 'userFinancialProfiles', userId) : null
   const { data: financialProfile } = useFirestore(financialProfileRef)
+  const [primaryBank, setPrimaryBank] = useState(null)
+  const [primaryUPI, setPrimaryUPI] = useState(null)
   
   // Get wallet data from wallets collection
   const walletRef = userId ? doc(db, 'wallets', userId) : null
@@ -48,6 +50,42 @@ export default function UserWithdraw() {
 
   const feeAmount = amount ? (parseFloat(amount) * (config.feePercent || 10)) / 100 : 0
   const netAmount = amount ? parseFloat(amount) - feeAmount : 0
+
+  // Load primary bank and UPI from banks subcollection
+  useEffect(() => {
+    const loadPrimaryPaymentMethods = async () => {
+      if (!userId) return
+      
+      try {
+        const banksRef = collection(db, 'userFinancialProfiles', userId, 'banks')
+        const snapshot = await getDocs(banksRef)
+        const banks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        
+        // Find primary bank
+        const primaryBankAccount = banks.find(b => b.paymentType === 'bank' && b.isPrimary) || 
+                                   banks.find(b => b.paymentType === 'bank')
+        if (primaryBankAccount) {
+          setPrimaryBank(primaryBankAccount)
+        }
+        
+        // Find primary UPI
+        const primaryUPIAccount = banks.find(b => b.paymentType === 'upi' && b.isPrimary) || 
+                                  banks.find(b => b.paymentType === 'upi')
+        if (primaryUPIAccount) {
+          setPrimaryUPI(primaryUPIAccount)
+        }
+      } catch (error) {
+        console.error('Error loading payment methods:', error)
+      }
+    }
+    
+    loadPrimaryPaymentMethods()
+  }, [userId])
+
+  // Get verification status - prefer banks subcollection, fallback to legacy
+  const bankVerified = primaryBank?.isVerified ?? financialProfile?.bank?.isVerified ?? false
+  const bankDetails = primaryBank || financialProfile?.bank
+  const upiDetails = primaryUPI || financialProfile?.upi
 
   const checkWithdrawalEligibility = async () => {
     if (!user || !userData) return
@@ -81,14 +119,14 @@ export default function UserWithdraw() {
 
       // Check bank verification requirement
       if (config.requireBankVerified && method === 'bank') {
-        if (!financialProfile?.bank?.isVerified) {
+        if (!bankVerified) {
           toast.error('Bank details must be verified before withdrawal')
           return false
         }
       }
 
       // Check UPI requirement
-      if (method === 'upi' && !financialProfile?.upi?.upiId) {
+      if (method === 'upi' && !upiDetails?.upiId) {
         toast.error('UPI ID is required for UPI withdrawal')
         return false
       }
@@ -136,11 +174,11 @@ export default function UserWithdraw() {
         amount: amountNum,
         method: data.method,
         payoutDetails: data.method === 'bank' ? {
-          accountNumber: financialProfile?.bank?.accountNumberMasked || '',
-          ifsc: financialProfile?.bank?.ifsc || '',
-          holderName: financialProfile?.bank?.holderName || ''
+          accountNumber: bankDetails?.accountNumberMasked || (bankDetails?.accountNumberLast4 ? `XXXXXX${bankDetails.accountNumberLast4}` : ''),
+          ifsc: bankDetails?.ifsc || '',
+          holderName: bankDetails?.holderName || ''
         } : {
-          upiId: financialProfile?.upi?.upiId || ''
+          upiId: upiDetails?.upiId || ''
         }
       })
 
@@ -252,32 +290,44 @@ export default function UserWithdraw() {
 
               {method === 'bank' && (
                 <div className={`p-4 rounded-lg border-2 ${
-                  financialProfile?.bank?.isVerified 
+                  bankVerified 
                     ? 'border-green-500/50 bg-green-500/10' 
                     : 'border-yellow-500/50 bg-yellow-500/10'
                 }`}>
                   <div className="flex items-start gap-3 mb-3">
-                    {financialProfile?.bank?.isVerified ? (
+                    {bankVerified ? (
                       <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={20} />
                     ) : (
                       <AlertCircle className="text-yellow-500 flex-shrink-0 mt-0.5" size={20} />
                     )}
                     <div className="flex-1">
-                      <h3 className="font-semibold text-white mb-2">Bank Details</h3>
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="font-semibold text-white">Bank Details</h3>
+                        {bankVerified ? (
+                          <span className="badge bg-green-500 text-xs">Verified</span>
+                        ) : (
+                          <span className="badge bg-yellow-500 text-xs">Pending Verification</span>
+                        )}
+                      </div>
                       <div className="space-y-1 text-sm">
                         <p className="text-gray-300">
-                          <span className="text-gray-400">Account:</span> {financialProfile?.bank?.accountNumberMasked || 'Not set'}
+                          <span className="text-gray-400">Account:</span> {bankDetails?.accountNumberMasked || bankDetails?.accountNumberLast4 ? `XXXXXX${bankDetails?.accountNumberLast4 || ''}` : 'Not set'}
                         </p>
                         <p className="text-gray-300">
-                          <span className="text-gray-400">IFSC:</span> {financialProfile?.bank?.ifsc || 'Not set'}
+                          <span className="text-gray-400">IFSC:</span> {bankDetails?.ifsc || 'Not set'}
                         </p>
                         <p className="text-gray-300">
-                          <span className="text-gray-400">Holder:</span> {financialProfile?.bank?.holderName || 'Not set'}
+                          <span className="text-gray-400">Holder:</span> {bankDetails?.holderName || 'Not set'}
                         </p>
+                        {bankDetails?.bankName && (
+                          <p className="text-gray-300">
+                            <span className="text-gray-400">Bank:</span> {bankDetails.bankName}
+                          </p>
+                        )}
                       </div>
-                      {!financialProfile?.bank?.isVerified && (
+                      {!bankVerified && (
                         <p className="text-yellow-500 text-sm mt-3">
-                          ⚠️ Bank details not verified. Please update in Profile.
+                          ⚠️ Bank details submitted for verification. Please wait for admin approval.
                         </p>
                       )}
                     </div>
@@ -287,22 +337,40 @@ export default function UserWithdraw() {
 
               {method === 'upi' && (
                 <div className={`p-4 rounded-lg border-2 ${
-                  financialProfile?.upi?.upiId 
-                    ? 'border-green-500/50 bg-green-500/10' 
-                    : 'border-yellow-500/50 bg-yellow-500/10'
+                  upiDetails?.upiId 
+                    ? upiDetails?.isVerified
+                      ? 'border-green-500/50 bg-green-500/10'
+                      : 'border-yellow-500/50 bg-yellow-500/10'
+                    : 'border-red-500/50 bg-red-500/10'
                 }`}>
                   <div className="flex items-start gap-3">
-                    {financialProfile?.upi?.upiId ? (
-                      <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={20} />
+                    {upiDetails?.upiId ? (
+                      upiDetails?.isVerified ? (
+                        <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={20} />
+                      ) : (
+                        <AlertCircle className="text-yellow-500 flex-shrink-0 mt-0.5" size={20} />
+                      )
                     ) : (
-                      <AlertCircle className="text-yellow-500 flex-shrink-0 mt-0.5" size={20} />
+                      <AlertCircle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
                     )}
                     <div className="flex-1">
-                      <h3 className="font-semibold text-white mb-2">UPI Details</h3>
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="font-semibold text-white">UPI Details</h3>
+                        {upiDetails?.isVerified ? (
+                          <span className="badge bg-green-500 text-xs">Verified</span>
+                        ) : upiDetails?.upiId ? (
+                          <span className="badge bg-yellow-500 text-xs">Pending Verification</span>
+                        ) : null}
+                      </div>
                       <p className="text-sm text-gray-300">
-                        <span className="text-gray-400">UPI ID:</span> {financialProfile?.upi?.upiId || 'Not set'}
+                        <span className="text-gray-400">UPI ID:</span> {upiDetails?.upiId || 'Not set'}
                       </p>
-                      {!financialProfile?.upi?.upiId && (
+                      {upiDetails?.upiId && !upiDetails?.isVerified && (
+                        <p className="text-yellow-500 text-sm mt-3">
+                          ⚠️ UPI ID submitted for verification. Please wait for admin approval.
+                        </p>
+                      )}
+                      {!upiDetails?.upiId && (
                         <p className="text-yellow-500 text-sm mt-3">
                           ⚠️ UPI ID not set. Please update in Profile.
                         </p>
@@ -421,3 +489,4 @@ export default function UserWithdraw() {
     </div>
   )
 }
+

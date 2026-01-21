@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, setDoc, getDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -146,7 +146,38 @@ export default function BankDetailsOnboarding() {
       const accountNumberMasked = `XXXXXX${data.accountNumber.slice(-4)}`
       const accountNumberLast4 = data.accountNumber.slice(-4)
 
-      // Save bank details
+      // Save bank details to banks subcollection (new structure) for automatic verification submission
+      const bankData = {
+        paymentType: 'bank',
+        holderName: data.accountHolderName,
+        accountNumberMasked: accountNumberMasked,
+        accountNumberLast4: accountNumberLast4,
+        ifsc: data.ifscCode.toUpperCase(),
+        bankName: data.bankName || bankDetails?.bank || '',
+        branch: data.branch || bankDetails?.branch || '',
+        city: bankDetails?.city || '',
+        accountType: data.accountType,
+        isVerified: false, // Submitted for admin verification
+        isPrimary: true, // First bank is set as primary
+        createdAt: serverTimestamp()
+      }
+
+      // Add to banks subcollection
+      await addDoc(collection(db, 'userFinancialProfiles', userId, 'banks'), bankData)
+
+      // Also save UPI if provided
+      if (data.upiId) {
+        const upiData = {
+          paymentType: 'upi',
+          upiId: data.upiId.toLowerCase(),
+          isVerified: false, // Submitted for admin verification
+          isPrimary: false,
+          createdAt: serverTimestamp()
+        }
+        await addDoc(collection(db, 'userFinancialProfiles', userId, 'banks'), upiData)
+      }
+
+      // Also maintain legacy structure for backward compatibility
       await setDoc(doc(db, 'userFinancialProfiles', userId), {
         bank: {
           holderName: data.accountHolderName,
@@ -172,7 +203,7 @@ export default function BankDetailsOnboarding() {
         updatedAt: serverTimestamp()
       }, { merge: true })
 
-      toast.success('Bank details saved successfully!')
+      toast.success('Bank details saved and submitted for verification!')
       
       // Redirect based on program selection status
       setTimeout(() => {
