@@ -8,7 +8,7 @@ import {
   Users, Search, Plus, Download, UserCheck, UserX, 
   Save, Lock, Ban, Eye, Check, X, ChevronDown, ChevronRight,
   LayoutDashboard, FileText, Package, DollarSign, Wallet,
-  ArrowUpCircle, FileCheck, TreePine, Settings
+  ArrowUpCircle, FileCheck, TreePine, Settings, Database
 } from 'lucide-react'
 import { formatDate } from '../../utils/helpers'
 import { useAuth } from '../../contexts/AuthContext'
@@ -24,7 +24,8 @@ const PERMISSION_GROUPS = {
   reports: { label: 'Reports', icon: DollarSign, path: '/admin/reports' },
   payoutReports: { label: 'Payout Reports', icon: DollarSign, path: '/admin/payout-reports' },
   levelTree: { label: 'Level Tree', icon: TreePine, path: '/admin/level-tree' },
-  content: { label: 'Content Pages', icon: FileText, path: '/admin/content' }
+  content: { label: 'Content Pages', icon: FileText, path: '/admin/content' },
+  migration: { label: 'Migration', icon: Database, path: '/admin/migration' }
 }
 
 // Permission actions
@@ -501,6 +502,10 @@ function SubAdminDetails({ subAdmin, activeTab, setActiveTab, onUpdate }) {
                           // For payoutReports, show view, export, create, viewProof
                           if (key === 'payoutReports') {
                             return action === 'view' || action === 'export' || action === 'create' || action === 'viewProof'
+                          }
+                          // For migration, show view, create, edit (import operations)
+                          if (key === 'migration') {
+                            return action === 'view' || action === 'create' || action === 'edit'
                           }
                           // For others, show all except export/viewProof (unless reports/payoutReports)
                           return action !== 'export' && action !== 'viewProof' || key === 'reports' || key === 'payoutReports'

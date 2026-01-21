@@ -24,7 +24,8 @@ import {
   Calendar,
   TreePine,
   Shield,
-  Building2
+  Building2,
+  Database
 } from 'lucide-react'
 
 // Permission mapping for menu items
@@ -39,6 +40,7 @@ const PERMISSION_MAP = {
   '/admin/referral-income': 'reports',
   '/admin/level-tree': 'levelTree',
   '/admin/content': 'content',
+  '/admin/migration': 'migration',
 }
 
 // Check if user has permission for a route
@@ -99,6 +101,7 @@ export default function AdminLayout() {
     { path: '/admin/user-menu-settings', icon: Settings, label: 'User Menu Settings', permission: null, superAdminOnly: true },
     { path: '/admin/settings', icon: Settings, label: 'Settings', permission: null, superAdminOnly: true },
     { path: '/admin/sub-admins', icon: Shield, label: 'Sub Admins', permission: null, superAdminOnly: true },
+    { path: '/admin/migration', icon: Database, label: 'Migration', permission: 'migration', superAdminOnly: false },
   ]
 
   // Filter nav items based on permissions

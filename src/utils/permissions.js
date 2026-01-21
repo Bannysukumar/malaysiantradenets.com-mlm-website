@@ -14,6 +14,7 @@ export const PERMISSION_MAP = {
   '/admin/payout-reports/payout-history': 'payoutReports',
   '/admin/level-tree': 'levelTree',
   '/admin/content': 'content',
+  '/admin/migration': 'migration',
 }
 
 // Check if user has permission for a route

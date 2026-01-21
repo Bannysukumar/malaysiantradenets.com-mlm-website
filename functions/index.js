@@ -4618,5 +4618,907 @@ exports.migrateReferralCodesToUserId = functions.https.onCall(async (data, conte
   }
 });
 
+// ============================================
+// DATA MIGRATION FUNCTIONS (SuperAdmin only)
+// ============================================
+
+// Validate User Import
+exports.validateUserImport = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+  if (!adminDoc.exists || adminDoc.data().role !== 'superAdmin') {
+    throw new functions.https.HttpsError('permission-denied', 'Only superAdmin can access migration');
+  }
+
+  try {
+    const { users, importMode } = data;
+    const errors = [];
+    const userIds = new Set();
+    const emails = new Set();
+    const mobiles = new Set();
+
+    for (let i = 0; i < users.length; i++) {
+      const user = users[i];
+      const row = i + 1;
+
+      // Required fields
+      if (!user.userId || !user.userId.trim()) {
+        errors.push({ row, message: 'User ID is required' });
+        continue;
+      }
+
+      if (!user.userId.startsWith('MTN')) {
+        errors.push({ row, message: 'User ID must start with MTN' });
+      }
+
+      if (userIds.has(user.userId)) {
+        errors.push({ row, message: `Duplicate User ID: ${user.userId}` });
+      } else {
+        userIds.add(user.userId);
+      }
+
+      if (!user.fullName || !user.fullName.trim()) {
+        errors.push({ row, message: 'Full Name is required' });
+      }
+
+      if (!user.mobile || !user.mobile.trim()) {
+        errors.push({ row, message: 'Mobile is required' });
+      } else {
+        const cleanMobile = user.mobile.replace(/[\s\-\(\)]/g, '');
+        if (mobiles.has(cleanMobile)) {
+          errors.push({ row, message: `Duplicate Mobile: ${user.mobile}` });
+        } else {
+          mobiles.add(cleanMobile);
+        }
+      }
+
+      if (user.email && user.email.trim()) {
+        const emailLower = user.email.toLowerCase().trim();
+        if (emails.has(emailLower)) {
+          errors.push({ row, message: `Duplicate Email: ${user.email}` });
+        } else {
+          emails.add(emailLower);
+        }
+      }
+
+      // Validate sponsor exists (if provided)
+      if (user.sponsorId && user.sponsorId.trim()) {
+        // Check if sponsor exists in DB or in same batch
+        const sponsorExists = userIds.has(user.sponsorId);
+        if (!sponsorExists) {
+          // Check in database
+          const sponsorQuery = await db.collection('users')
+            .where('userId', '==', user.sponsorId)
+            .limit(1)
+            .get();
+          if (sponsorQuery.empty) {
+            errors.push({ row, message: `Sponsor ID not found: ${user.sponsorId}` });
+          }
+        }
+      }
+
+      // Validate program type
+      if (user.programType && !['investor', 'leader'].includes(user.programType.toLowerCase())) {
+        errors.push({ row, message: 'Program Type must be investor or leader' });
+      }
+
+      // Validate status
+      if (user.status && !['active', 'pending', 'blocked'].includes(user.status.toLowerCase())) {
+        errors.push({ row, message: 'Status must be active, pending, or blocked' });
+      }
+
+      // Validate dates
+      if (user.joinDate && isNaN(Date.parse(user.joinDate))) {
+        errors.push({ row, message: 'Invalid Join Date format' });
+      }
+
+      if (user.activationDate && isNaN(Date.parse(user.activationDate))) {
+        errors.push({ row, message: 'Invalid Activation Date format' });
+      }
+
+      // Validate invest amount
+      if (user.investAmount && isNaN(parseFloat(user.investAmount))) {
+        errors.push({ row, message: 'Invest Amount must be a valid number' });
+      }
+    }
+
+    return { errors, valid: errors.length === 0 };
+  } catch (error) {
+    console.error('Validation error:', error);
+    throw new functions.https.HttpsError('internal', 'Validation failed: ' + error.message);
+  }
+});
+
+// Import Users
+exports.importUsers = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+  if (!adminDoc.exists || adminDoc.data().role !== 'superAdmin') {
+    throw new functions.https.HttpsError('permission-denied', 'Only superAdmin can import users');
+  }
+
+  try {
+    const { users, importMode, forcePasswordReset, createdBy } = data;
+    const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    let inserted = 0;
+    let updated = 0;
+    let skipped = 0;
+    const errorRows = [];
+    const docIds = [];
+
+    const auth = admin.auth();
+
+    for (let i = 0; i < users.length; i++) {
+      const userData = users[i];
+      const row = i + 1;
+
+      try {
+        // Check if user already exists by userId
+        const existingUserQuery = await db.collection('users')
+          .where('userId', '==', userData.userId)
+          .limit(1)
+          .get();
+
+        if (!existingUserQuery.empty && importMode === 'safe-insert') {
+          skipped++;
+          continue;
+        }
+
+        // Generate password if not provided
+        let password = userData.tempPassword || '';
+        if (!password) {
+          password = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12).toUpperCase() + '!';
+        }
+
+        // Generate email if missing
+        let email = userData.email || '';
+        if (!email || !email.trim()) {
+          email = `${userData.userId}@yourapp.local`;
+        }
+
+        // Find or create Firebase Auth user
+        let firebaseUser;
+        try {
+          firebaseUser = await auth.getUserByEmail(email.toLowerCase().trim());
+        } catch (error) {
+          if (error.code === 'auth/user-not-found') {
+            // Create new user
+            firebaseUser = await auth.createUser({
+              email: email.toLowerCase().trim(),
+              password: password,
+              displayName: userData.fullName,
+              emailVerified: false
+            });
+
+            // Force password reset if requested
+            if (forcePasswordReset) {
+              await auth.generatePasswordResetLink(email.toLowerCase().trim());
+            }
+          } else {
+            throw error;
+          }
+        }
+
+        const uid = firebaseUser.uid;
+
+        // Prepare user document
+        const userDoc = {
+          userId: userData.userId,
+          name: userData.fullName,
+          email: email.toLowerCase().trim(),
+          emailLower: email.toLowerCase().trim(),
+          phone: userData.mobile.replace(/[\s\-\(\)]/g, ''),
+          programType: (userData.programType || 'investor').toLowerCase(),
+          status: (userData.status || 'active').toUpperCase(),
+          role: 'user',
+          createdAt: userData.joinDate 
+            ? admin.firestore.Timestamp.fromDate(new Date(userData.joinDate))
+            : admin.firestore.FieldValue.serverTimestamp(),
+          walletBalance: 0,
+          pendingBalance: 0,
+          lifetimeEarned: 0,
+          lifetimeWithdrawn: 0,
+          bankDetailsCompleted: !!(userData.bankAccountNo && userData.ifsc),
+          refCode: userData.userId, // Set refCode to userId
+        };
+
+        // Add optional fields
+        if (userData.panCard) userDoc.panNumber = userData.panCard.toUpperCase();
+        if (userData.country) userDoc.country = userData.country;
+        if (userData.state) userDoc.state = userData.state;
+        if (userData.activationDate) {
+          userDoc.activatedAt = admin.firestore.Timestamp.fromDate(new Date(userData.activationDate));
+        }
+
+        // Handle sponsor relationship
+        if (userData.sponsorId && userData.sponsorId.trim()) {
+          const sponsorQuery = await db.collection('users')
+            .where('userId', '==', userData.sponsorId)
+            .limit(1)
+            .get();
+          
+          if (!sponsorQuery.empty) {
+            const sponsorUid = sponsorQuery.docs[0].id;
+            userDoc.referredByUid = sponsorUid;
+            userDoc.sponsorUserId = userData.sponsorId;
+          }
+        }
+
+        // Create or update user document
+        const userRef = db.collection('users').doc(uid);
+        const existingUser = await userRef.get();
+
+        if (existingUser.exists) {
+          if (importMode === 'upsert') {
+            await userRef.update(userDoc);
+            updated++;
+          } else {
+            skipped++;
+            continue;
+          }
+        } else {
+          await userRef.set(userDoc);
+          inserted++;
+        }
+
+        docIds.push(uid);
+
+        // Save bank details if provided
+        if (userData.bankAccountNo && userData.ifsc) {
+          const financialRef = db.collection('userFinancialProfiles').doc(uid);
+          await financialRef.set({
+            bank: {
+              holderName: userData.fullName,
+              accountNumberMasked: 'XXXXXX' + userData.bankAccountNo.slice(-4),
+              accountNumberLast4: userData.bankAccountNo.slice(-4),
+              ifsc: userData.ifsc.toUpperCase(),
+              bankName: userData.bankName || '',
+              branch: userData.branchName || '',
+              isVerified: false
+            },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+        }
+
+        // Save UPI if provided
+        if (userData.upiId) {
+          const financialRef = db.collection('userFinancialProfiles').doc(uid);
+          await financialRef.set({
+            upi: {
+              upiId: userData.upiId.toLowerCase(),
+              isVerified: false
+            },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+        }
+
+        // Create wallet document
+        const walletRef = db.collection('wallets').doc(uid);
+        await walletRef.set({
+          availableBalance: 0,
+          pendingBalance: 0,
+          lifetimeEarned: 0,
+          lifetimeWithdrawn: 0,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        // Create user package if invest amount provided
+        if (userData.investAmount && parseFloat(userData.investAmount) > 0) {
+          let packageIdToUse = userData.packageId || userData.packageName || 'MIGRATED';
+          let packageNameToUse = userData.packageName || 'Migrated Package';
+          let amountToUse = parseFloat(userData.investAmount);
+
+          // If packageId is provided, fetch package details
+          if (userData.packageId) {
+            try {
+              const packageDoc = await db.collection('packages').doc(userData.packageId).get();
+              if (packageDoc.exists) {
+                const packageData = packageDoc.data();
+                packageIdToUse = userData.packageId;
+                packageNameToUse = packageData.name || userData.packageName || 'Migrated Package';
+                // Use package price if investAmount not provided or use provided amount
+                if (!userData.investAmount || parseFloat(userData.investAmount) === 0) {
+                  amountToUse = packageData.inrPrice || packageData.amount || 0;
+                }
+              }
+            } catch (error) {
+              console.error(`Error fetching package ${userData.packageId}:`, error);
+              // Fall back to provided values
+            }
+          }
+
+          const userPackageId = `migration_${uid}_${Date.now()}`;
+          await db.collection('userPackages').doc(userPackageId).set({
+            userId: uid,
+            packageId: packageIdToUse,
+            packageName: packageNameToUse,
+            amount: amountToUse,
+            currency: 'INR',
+            status: 'active',
+            activatedAt: userData.activationDate
+              ? admin.firestore.Timestamp.fromDate(new Date(userData.activationDate))
+              : admin.firestore.FieldValue.serverTimestamp(),
+            paymentMethod: 'migration',
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
+
+        // Build tree relationships (update sponsor's directCount)
+        if (userDoc.referredByUid) {
+          const sponsorRef = db.collection('users').doc(userDoc.referredByUid);
+          const sponsorDoc = await sponsorRef.get();
+          if (sponsorDoc.exists) {
+            const currentDirects = sponsorDoc.data().directReferrals || 0;
+            await sponsorRef.update({
+              directReferrals: currentDirects + 1
+            });
+          }
+        }
+
+      } catch (error) {
+        console.error(`Error importing user row ${row}:`, error);
+        errorRows.push({
+          row,
+          userId: userData.userId || 'N/A',
+          message: error.message || 'Unknown error'
+        });
+      }
+    }
+
+    // Create migration batch record
+    await db.collection('migrationBatches').doc(batchId).set({
+      batchId,
+      type: 'users',
+      mode: importMode,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy,
+      inserted,
+      updated,
+      skipped,
+      errorRows,
+      docIds
+    });
+
+    return {
+      success: true,
+      batchId,
+      inserted,
+      updated,
+      skipped,
+      errors: errorRows.length
+    };
+  } catch (error) {
+    console.error('Import error:', error);
+    throw new functions.https.HttpsError('internal', 'Import failed: ' + error.message);
+  }
+});
+
+// Validate Income Import
+exports.validateIncomeImport = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+  if (!adminDoc.exists || adminDoc.data().role !== 'superAdmin') {
+    throw new functions.https.HttpsError('permission-denied', 'Only superAdmin can access migration');
+  }
+
+  try {
+    const { incomes } = data;
+    const errors = [];
+    const validTypes = ['DIRECT', 'ROI', 'LEVEL_ON_ROI', 'BONANZA', 'ADJUSTMENT', 'REFERRAL_DIRECT', 'REFERRAL_LEVEL', 'TRANSFER_RECEIVED', 'ADMIN_CREDIT'];
+
+    for (let i = 0; i < incomes.length; i++) {
+      const income = incomes[i];
+      const row = i + 1;
+
+      if (!income.userId || !income.userId.trim()) {
+        errors.push({ row, message: 'User ID is required' });
+        continue;
+      }
+
+      // Check if user exists
+      const userQuery = await db.collection('users')
+        .where('userId', '==', income.userId)
+        .limit(1)
+        .get();
+      if (userQuery.empty) {
+        errors.push({ row, message: `User ID not found: ${income.userId}` });
+      }
+
+      if (!income.date || isNaN(Date.parse(income.date))) {
+        errors.push({ row, message: 'Valid date is required' });
+      }
+
+      if (!income.incomeType || !validTypes.includes(income.incomeType.toUpperCase())) {
+        errors.push({ row, message: `Invalid income type. Must be one of: ${validTypes.join(', ')}` });
+      }
+
+      const gross = parseFloat(income.amountGross) || 0;
+      const admin = parseFloat(income.adminCharge) || 0;
+      const tds = parseFloat(income.tds) || 0;
+      const net = parseFloat(income.amountNet) || 0;
+
+      if (gross <= 0) {
+        errors.push({ row, message: 'Gross amount must be greater than 0' });
+      }
+
+      const calculatedNet = gross - admin - tds;
+      if (Math.abs(calculatedNet - net) > 0.01) {
+        errors.push({ row, message: `Net amount mismatch. Expected ${calculatedNet.toFixed(2)}, got ${net.toFixed(2)}` });
+      }
+    }
+
+    return { errors, valid: errors.length === 0 };
+  } catch (error) {
+    console.error('Validation error:', error);
+    throw new functions.https.HttpsError('internal', 'Validation failed: ' + error.message);
+  }
+});
+
+// Import Incomes
+exports.importIncomes = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+  if (!adminDoc.exists || adminDoc.data().role !== 'superAdmin') {
+    throw new functions.https.HttpsError('permission-denied', 'Only superAdmin can import incomes');
+  }
+
+  try {
+    const { incomes, importMode, createdBy } = data;
+    const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    let inserted = 0;
+    let skipped = 0;
+    const errorRows = [];
+    const docIds = [];
+
+    for (let i = 0; i < incomes.length; i++) {
+      const incomeData = incomes[i];
+      const row = i + 1;
+
+      try {
+        // Find user by userId
+        const userQuery = await db.collection('users')
+          .where('userId', '==', incomeData.userId)
+          .limit(1)
+          .get();
+
+        if (userQuery.empty) {
+          errorRows.push({ row, message: `User ID not found: ${incomeData.userId}` });
+          continue;
+        }
+
+        const uid = userQuery.docs[0].id;
+        const gross = parseFloat(incomeData.amountGross) || 0;
+        const admin = parseFloat(incomeData.adminCharge) || 0;
+        const tds = parseFloat(incomeData.tds) || 0;
+        const net = parseFloat(incomeData.amountNet) || (gross - admin - tds);
+
+        // Create income ledger entry
+        const entryId = `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const entryRef = db.collection('incomeLedger').doc(uid).collection('entries').doc(entryId);
+
+        const entryData = {
+          type: incomeData.incomeType.toUpperCase(),
+          amount: net,
+          status: 'APPROVED',
+          description: incomeData.remark || `Imported ${incomeData.incomeType} income`,
+          reference: incomeData.referenceUserId || '',
+          metadata: {
+            level: incomeData.level ? parseInt(incomeData.level) : null,
+            referenceUserId: incomeData.referenceUserId || null,
+            migrationBatch: batchId,
+            grossAmount: gross,
+            adminCharge: admin,
+            tds: tds
+          },
+          createdAt: incomeData.date
+            ? admin.firestore.Timestamp.fromDate(new Date(incomeData.date))
+            : admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        await entryRef.set(entryData);
+        docIds.push(entryId);
+
+        // Update wallet totals
+        const walletRef = db.collection('wallets').doc(uid);
+        const walletDoc = await walletRef.get();
+
+        if (walletDoc.exists) {
+          const currentBalance = walletDoc.data().availableBalance || 0;
+          const currentEarned = walletDoc.data().lifetimeEarned || 0;
+          await walletRef.update({
+            availableBalance: currentBalance + net,
+            lifetimeEarned: currentEarned + net,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+        } else {
+          await walletRef.set({
+            availableBalance: net,
+            pendingBalance: 0,
+            lifetimeEarned: net,
+            lifetimeWithdrawn: 0,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
+
+        // Update legacy user document for backward compatibility
+        const userRef = db.collection('users').doc(uid);
+        const userDoc = await userRef.get();
+        if (userDoc.exists) {
+          const currentBalance = userDoc.data().walletBalance || 0;
+          const currentIncome = userDoc.data().totalIncome || userDoc.data().lifetimeEarned || 0;
+          await userRef.update({
+            walletBalance: currentBalance + net,
+            totalIncome: currentIncome + net,
+            lifetimeEarned: currentIncome + net,
+            lastIncomeUpdate: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
+
+        inserted++;
+      } catch (error) {
+        console.error(`Error importing income row ${row}:`, error);
+        errorRows.push({
+          row,
+          userId: incomeData.userId || 'N/A',
+          message: error.message || 'Unknown error'
+        });
+      }
+    }
+
+    // Create migration batch record
+    await db.collection('migrationBatches').doc(batchId).set({
+      batchId,
+      type: 'incomes',
+      mode: importMode,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy,
+      inserted,
+      skipped,
+      errorRows,
+      docIds
+    });
+
+    return {
+      success: true,
+      batchId,
+      inserted,
+      skipped,
+      errors: errorRows.length
+    };
+  } catch (error) {
+    console.error('Import error:', error);
+    throw new functions.https.HttpsError('internal', 'Import failed: ' + error.message);
+  }
+});
+
+// Validate Wallet Adjustment
+exports.validateWalletAdjustment = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+  if (!adminDoc.exists || adminDoc.data().role !== 'superAdmin') {
+    throw new functions.https.HttpsError('permission-denied', 'Only superAdmin can access migration');
+  }
+
+  return { valid: true, errors: [] };
+});
+
+// Adjust Wallets from Migration
+exports.adjustWalletsFromMigration = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+  if (!adminDoc.exists || adminDoc.data().role !== 'superAdmin') {
+    throw new functions.https.HttpsError('permission-denied', 'Only superAdmin can adjust wallets');
+  }
+
+  try {
+    const { adjustments, createdBy } = data;
+    const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    let adjusted = 0;
+    const errorRows = [];
+    const docIds = [];
+
+    for (let i = 0; i < adjustments.length; i++) {
+      const adj = adjustments[i];
+      const row = i + 1;
+
+      try {
+        // Find user by userId
+        const userQuery = await db.collection('users')
+          .where('userId', '==', adj.userId)
+          .limit(1)
+          .get();
+
+        if (userQuery.empty) {
+          errorRows.push({ row, message: `User ID not found: ${adj.userId}` });
+          continue;
+        }
+
+        const uid = userQuery.docs[0].id;
+
+        // Calculate adjustment amount
+        const walletRef = db.collection('wallets').doc(uid);
+        const walletDoc = await walletRef.get();
+        const currentBalance = walletDoc.exists ? (walletDoc.data().availableBalance || 0) : 0;
+        const currentEarned = walletDoc.exists ? (walletDoc.data().lifetimeEarned || 0) : 0;
+        const currentWithdrawn = walletDoc.exists ? (walletDoc.data().lifetimeWithdrawn || 0) : 0;
+
+        const newBalance = adj.balance !== '' ? parseFloat(adj.balance) : currentBalance;
+        const newEarned = adj.totalEarned !== '' ? parseFloat(adj.totalEarned) : currentEarned;
+        const newWithdrawn = adj.totalDeductions !== '' ? parseFloat(adj.totalDeductions) : currentWithdrawn;
+
+        const adjustmentAmount = newBalance - currentBalance;
+
+        // Update wallet
+        await walletRef.set({
+          availableBalance: newBalance,
+          pendingBalance: 0,
+          lifetimeEarned: newEarned,
+          lifetimeWithdrawn: newWithdrawn,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        // Create adjustment ledger entry
+        if (Math.abs(adjustmentAmount) > 0.01) {
+          const entryId = `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          await db.collection('incomeLedger').doc(uid).collection('entries').doc(entryId).set({
+            type: 'ADJUSTMENT',
+            amount: adjustmentAmount,
+            status: 'APPROVED',
+            description: adj.reason || 'Wallet adjustment from migration',
+            reference: batchId,
+            metadata: {
+              migrationBatch: batchId,
+              balanceBefore: currentBalance,
+              balanceAfter: newBalance,
+              adjustedBy: context.auth.uid
+            },
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
+
+        // Update legacy user document
+        const userRef = db.collection('users').doc(uid);
+        await userRef.update({
+          walletBalance: newBalance,
+          totalIncome: newEarned,
+          lifetimeEarned: newEarned,
+          lifetimeWithdrawn: newWithdrawn,
+          lastIncomeUpdate: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        docIds.push(uid);
+        adjusted++;
+      } catch (error) {
+        console.error(`Error adjusting wallet row ${row}:`, error);
+        errorRows.push({
+          row,
+          userId: adj.userId || 'N/A',
+          message: error.message || 'Unknown error'
+        });
+      }
+    }
+
+    // Create migration batch record
+    await db.collection('migrationBatches').doc(batchId).set({
+      batchId,
+      type: 'wallets',
+      mode: 'adjustment',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy,
+      adjusted,
+      errorRows,
+      docIds
+    });
+
+    return {
+      success: true,
+      batchId,
+      adjusted,
+      errors: errorRows.length
+    };
+  } catch (error) {
+    console.error('Adjustment error:', error);
+    throw new functions.https.HttpsError('internal', 'Adjustment failed: ' + error.message);
+  }
+});
+
+// Validate Payout Import
+exports.validatePayoutImport = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+  if (!adminDoc.exists || adminDoc.data().role !== 'superAdmin') {
+    throw new functions.https.HttpsError('permission-denied', 'Only superAdmin can access migration');
+  }
+
+  try {
+    const { payouts } = data;
+    const errors = [];
+
+    for (let i = 0; i < payouts.length; i++) {
+      const payout = payouts[i];
+      const row = i + 1;
+
+      if (!payout.userId || !payout.userId.trim()) {
+        errors.push({ row, message: 'User ID is required' });
+        continue;
+      }
+
+      // Check if user exists
+      const userQuery = await db.collection('users')
+        .where('userId', '==', payout.userId)
+        .limit(1)
+        .get();
+      if (userQuery.empty) {
+        errors.push({ row, message: `User ID not found: ${payout.userId}` });
+      }
+
+      if (!payout.payoutDate || isNaN(Date.parse(payout.payoutDate))) {
+        errors.push({ row, message: 'Valid payout date is required' });
+      }
+
+      const amount = parseFloat(payout.amount) || 0;
+      if (amount <= 0) {
+        errors.push({ row, message: 'Amount must be greater than 0' });
+      }
+
+      if (payout.mode && !['bank', 'upi', 'cash'].includes(payout.mode.toLowerCase())) {
+        errors.push({ row, message: 'Mode must be bank, upi, or cash' });
+      }
+
+      if (payout.status && !['paid', 'cancelled', 'pending'].includes(payout.status.toLowerCase())) {
+        errors.push({ row, message: 'Status must be paid, cancelled, or pending' });
+      }
+    }
+
+    return { errors, valid: errors.length === 0 };
+  } catch (error) {
+    console.error('Validation error:', error);
+    throw new functions.https.HttpsError('internal', 'Validation failed: ' + error.message);
+  }
+});
+
+// Import Payouts
+exports.importPayouts = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+  if (!adminDoc.exists || adminDoc.data().role !== 'superAdmin') {
+    throw new functions.https.HttpsError('permission-denied', 'Only superAdmin can import payouts');
+  }
+
+  try {
+    const { payouts, importMode, createdBy } = data;
+    const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    let inserted = 0;
+    let skipped = 0;
+    const errorRows = [];
+    const docIds = [];
+
+    for (let i = 0; i < payouts.length; i++) {
+      const payoutData = payouts[i];
+      const row = i + 1;
+
+      try {
+        // Find user by userId
+        const userQuery = await db.collection('users')
+          .where('userId', '==', payoutData.userId)
+          .limit(1)
+          .get();
+
+        if (userQuery.empty) {
+          errorRows.push({ row, message: `User ID not found: ${payoutData.userId}` });
+          continue;
+        }
+
+        const uid = userQuery.docs[0].id;
+        const amount = parseFloat(payoutData.amount);
+
+        // Create payout record
+        const payoutId = `payout_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        await db.collection('payouts').doc(payoutId).set({
+          memberUid: uid,
+          memberId: payoutData.userId,
+          memberName: userQuery.docs[0].data().name || 'Unknown',
+          amount: amount,
+          paymentDate: admin.firestore.Timestamp.fromDate(new Date(payoutData.payoutDate)),
+          mode: payoutData.mode || 'Bank Transfer',
+          remark: payoutData.remark || 'Imported payout',
+          proofUrl: payoutData.proofUrl || '',
+          status: payoutData.status ? payoutData.status.toUpperCase() : 'PAID',
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdBy: context.auth.uid
+        });
+
+        // Update wallet if status is PAID
+        if (payoutData.status && payoutData.status.toLowerCase() === 'paid') {
+          const walletRef = db.collection('wallets').doc(uid);
+          const walletDoc = await walletRef.get();
+
+          if (walletDoc.exists) {
+            const currentBalance = walletDoc.data().availableBalance || 0;
+            const currentWithdrawn = walletDoc.data().lifetimeWithdrawn || 0;
+            await walletRef.update({
+              availableBalance: Math.max(0, currentBalance - amount),
+              lifetimeWithdrawn: currentWithdrawn + amount,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+          }
+
+          // Update legacy user document
+          const userRef = db.collection('users').doc(uid);
+          const userDoc = await userRef.get();
+          if (userDoc.exists) {
+            const currentBalance = userDoc.data().walletBalance || 0;
+            const currentWithdrawn = userDoc.data().lifetimeWithdrawn || 0;
+            await userRef.update({
+              walletBalance: Math.max(0, currentBalance - amount),
+              lifetimeWithdrawn: currentWithdrawn + amount
+            });
+          }
+        }
+
+        docIds.push(payoutId);
+        inserted++;
+      } catch (error) {
+        console.error(`Error importing payout row ${row}:`, error);
+        errorRows.push({
+          row,
+          userId: payoutData.userId || 'N/A',
+          message: error.message || 'Unknown error'
+        });
+      }
+    }
+
+    // Create migration batch record
+    await db.collection('migrationBatches').doc(batchId).set({
+      batchId,
+      type: 'payouts',
+      mode: importMode,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy,
+      inserted,
+      skipped,
+      errorRows,
+      docIds
+    });
+
+    return {
+      success: true,
+      batchId,
+      inserted,
+      skipped,
+      errors: errorRows.length
+    };
+  } catch (error) {
+    console.error('Import error:', error);
+    throw new functions.https.HttpsError('internal', 'Import failed: ' + error.message);
+  }
+});
+
 // Auto-generate User ID when user document is created (if missing)
 

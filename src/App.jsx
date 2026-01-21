@@ -78,6 +78,7 @@ import AdminReferralIncomeSettings from './pages/admin/ReferralIncomeSettings'
 import AdminReferralIncomeReport from './pages/admin/ReferralIncomeReport'
 import AdminPayoutSettings from './pages/admin/PayoutSettings'
 import AdminSubAdmins from './pages/admin/SubAdmins'
+import AdminMigration from './pages/admin/migration'
 import ReportsLayout from './layouts/ReportsLayout'
 import LevelReport from './pages/admin/reports/LevelReport'
 import DirectReferralReport from './pages/admin/reports/DirectReferralReport'
@@ -179,6 +180,7 @@ function AppRoutes() {
         <Route path="referral-income" element={<AdminReferralIncomeReport />} />
         <Route path="payout-settings" element={<AdminPayoutSettings />} />
         <Route path="sub-admins" element={<AdminSubAdmins />} />
+        <Route path="migration" element={<AdminMigration />} />
         <Route path="reports" element={<ReportsLayout />}>
           <Route index element={<Navigate to="level" replace />} />
           <Route path="level" element={<LevelReport />} />
