@@ -152,3 +152,17 @@ export function validateWithdrawalAmount(amount, minAmount, maxAmount) {
   return null
 }
 
+export function validatePAN(pan) {
+  if (!pan) {
+    return 'PAN card number is required'
+  }
+  
+  // PAN format: ABCDE1234F (5 letters, 4 digits, 1 letter)
+  const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/
+  if (!panRegex.test(pan.toUpperCase())) {
+    return 'Invalid PAN card format (e.g., ABCDE1234F)'
+  }
+  
+  return null
+}
+

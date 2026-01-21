@@ -1,0 +1,71 @@
+// Country and State data for dropdowns
+
+export const countries = [
+  { code: '+91', name: 'India', flag: '🇮🇳' },
+  { code: '+1', name: 'United States', flag: '🇺🇸' },
+  { code: '+44', name: 'United Kingdom', flag: '🇬🇧' },
+  { code: '+60', name: 'Malaysia', flag: '🇲🇾' },
+  { code: '+65', name: 'Singapore', flag: '🇸🇬' },
+  { code: '+971', name: 'UAE', flag: '🇦🇪' },
+  { code: '+86', name: 'China', flag: '🇨🇳' },
+  { code: '+81', name: 'Japan', flag: '🇯🇵' },
+  { code: '+61', name: 'Australia', flag: '🇦🇺' },
+  { code: '+49', name: 'Germany', flag: '🇩🇪' },
+  { code: '+33', name: 'France', flag: '🇫🇷' },
+  { code: '+39', name: 'Italy', flag: '🇮🇹' },
+  { code: '+34', name: 'Spain', flag: '🇪🇸' },
+  { code: '+7', name: 'Russia', flag: '🇷🇺' },
+  { code: '+82', name: 'South Korea', flag: '🇰🇷' },
+  { code: '+66', name: 'Thailand', flag: '🇹🇭' },
+  { code: '+62', name: 'Indonesia', flag: '🇮🇩' },
+  { code: '+84', name: 'Vietnam', flag: '🇻🇳' },
+  { code: '+63', name: 'Philippines', flag: '🇵🇭' },
+  { code: '+880', name: 'Bangladesh', flag: '🇧🇩' },
+  { code: '+92', name: 'Pakistan', flag: '🇵🇰' },
+  { code: '+94', name: 'Sri Lanka', flag: '🇱🇰' },
+  { code: '+977', name: 'Nepal', flag: '🇳🇵' },
+]
+
+export const indianStates = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli',
+  'Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
+]
+
+export const bankNames = [
+  'State Bank of India (SBI)',
+  'HDFC Bank',
+  'ICICI Bank',
+  'Axis Bank',
+  'Punjab National Bank (PNB)',
+  'Bank of Baroda',
+  'Canara Bank',
+  'Union Bank of India',
+  'Indian Bank',
+  'Central Bank of India',
+  'Indian Overseas Bank',
+  'Bank of India',
+  'UCO Bank',
+  'IDBI Bank',
+  'Kotak Mahindra Bank',
+  'Yes Bank',
+  'IndusInd Bank',
+  'Federal Bank',
+  'South Indian Bank',
+  'Karur Vysya Bank',
+  'City Union Bank',
+  'DCB Bank',
+  'RBL Bank',
+  'Bandhan Bank',
+  'DBS Bank',
+  'Standard Chartered Bank',
+  'HSBC Bank',
+  'Citibank',
+  'Other'
+]
+

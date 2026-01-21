@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useForm } from 'react-hook-form'
-import { doc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc, addDoc } from 'firebase/firestore'
+import { doc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc, addDoc, getDoc } from 'firebase/firestore'
 import { db, storage } from '../../config/firebase'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import toast from 'react-hot-toast'
@@ -142,6 +142,10 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
     try {
       const paymentType = data.paymentType
 
+      // Check if auto-verify is enabled
+      const verificationConfig = await getDoc(doc(db, 'adminConfig', 'verification'))
+      const autoVerifyBank = verificationConfig.exists() && verificationConfig.data()?.autoVerifyBank === true
+
       if (paymentType === 'bank') {
         const accountError = validateAccountNumber(data.accountNumber, data.confirmAccountNumber)
         if (accountError) {
@@ -166,9 +170,14 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
           branch: bankDetails.branch || data.branch || '',
           city: bankDetails.city || '',
           accountType: data.accountType,
-          isVerified: false,
+          isVerified: autoVerifyBank,
           isPrimary: data.isPrimary || false,
           createdAt: new Date(),
+          ...(autoVerifyBank && {
+            verifiedAt: new Date(),
+            verifiedBy: 'system',
+            adminRemarks: 'Auto-verified by system'
+          })
         }
 
         // If setting as primary, unset other primary banks
@@ -187,7 +196,18 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
           toast.success('Bank details updated')
         } else {
           await addDoc(collection(db, 'userFinancialProfiles', userId, 'banks'), bankData)
-          toast.success('Bank details added. Awaiting admin verification.')
+          
+          // Update user's bankVerified status if auto-verify is enabled and this is primary
+          if (autoVerifyBank && bankData.isPrimary) {
+            await updateDoc(doc(db, 'users', userId), {
+              bankVerified: true,
+              updatedAt: new Date()
+            })
+          }
+          
+          toast.success(autoVerifyBank 
+            ? 'Bank details added and automatically verified!' 
+            : 'Bank details added. Awaiting admin verification.')
         }
       } else if (paymentType === 'upi') {
         const upiError = validateUPI(data.upiId)
@@ -200,9 +220,14 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
           paymentType: 'upi',
           upiId: data.upiId.toLowerCase(),
           upiName: data.upiName || '',
-          isVerified: false,
+          isVerified: autoVerifyBank,
           isPrimary: data.isPrimary || false,
           createdAt: new Date(),
+          ...(autoVerifyBank && {
+            verifiedAt: new Date(),
+            verifiedBy: 'system',
+            adminRemarks: 'Auto-verified by system'
+          })
         }
 
         // If setting as primary, unset other primary banks
@@ -221,7 +246,18 @@ function BankAccountsTab({ userId, financialProfile, fetchingIFSC, setFetchingIF
           toast.success('UPI details updated')
         } else {
           await addDoc(collection(db, 'userFinancialProfiles', userId, 'banks'), upiData)
-          toast.success('UPI details added')
+          
+          // Update user's bankVerified status if auto-verify is enabled and this is primary
+          if (autoVerifyBank && upiData.isPrimary) {
+            await updateDoc(doc(db, 'users', userId), {
+              bankVerified: true,
+              updatedAt: new Date()
+            })
+          }
+          
+          toast.success(autoVerifyBank 
+            ? 'UPI details added and automatically verified!' 
+            : 'UPI details added. Awaiting admin verification.')
         }
       }
 
@@ -958,6 +994,10 @@ export default function UserProfile() {
         return
       }
 
+      // Check if auto-verify is enabled
+      const verificationConfig = await getDoc(doc(db, 'adminConfig', 'verification'))
+      const autoVerifyKYC = verificationConfig.exists() && verificationConfig.data()?.autoVerifyKYC === true
+
       // Upload documents to Firebase Storage
       const uploadedDocs = {}
       for (const [key, file] of Object.entries(kycDocuments)) {
@@ -976,20 +1016,33 @@ export default function UserProfile() {
         panNumber: data.panNumber.toUpperCase(),
         aadharNumber: data.aadharNumber || null,
         documents: uploadedDocs,
-        status: 'pending',
+        status: autoVerifyKYC ? 'approved' : 'pending',
         submittedAt: new Date(),
+        ...(autoVerifyKYC && {
+          approvedAt: new Date(),
+          approvedBy: 'system',
+          adminRemarks: 'Auto-verified by system'
+        })
       }
 
-      await addDoc(collection(db, 'kycRequests'), kycRequestData)
+      const kycRequestRef = await addDoc(collection(db, 'kycRequests'), kycRequestData)
 
-      // Update user with PAN number
-      await updateDoc(doc(db, 'users', userId), {
+      // Update user with PAN number and KYC status
+      const userUpdateData = {
         panNumber: data.panNumber.toUpperCase(),
         aadharNumber: data.aadharNumber || null,
         updatedAt: new Date(),
-      })
+      }
+      
+      if (autoVerifyKYC) {
+        userUpdateData.kycVerified = true
+      }
+      
+      await updateDoc(doc(db, 'users', userId), userUpdateData)
 
-      toast.success('KYC request submitted successfully')
+      toast.success(autoVerifyKYC 
+        ? 'KYC request submitted and automatically verified!' 
+        : 'KYC request submitted successfully')
       setKycDocuments({ panImage: null, aadharFront: null, aadharBack: null, selfie: null })
       kycForm.reset()
     } catch (error) {

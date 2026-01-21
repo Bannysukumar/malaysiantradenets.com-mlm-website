@@ -9,7 +9,7 @@ import {
   sendEmailVerification,
   updateProfile
 } from 'firebase/auth'
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc, addDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { auth, db, functions } from '../config/firebase'
 import toast from 'react-hot-toast'
@@ -147,7 +147,29 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const signUp = async (email, password, name, phone, refCode = null) => {
+  const signUp = async (signupData) => {
+    // Support both old format (backward compatibility) and new format
+    let email, password, name, phone, refCode = null, panCard, country, state, bankDetails
+    
+    if (signupData && typeof signupData === 'object' && signupData.email) {
+      // New format: object with all fields
+      email = signupData.email
+      password = signupData.password
+      name = signupData.name
+      phone = signupData.phone
+      refCode = signupData.referralCode || null
+      panCard = signupData.panCard
+      country = signupData.country
+      state = signupData.state
+      bankDetails = signupData.bankDetails
+    } else {
+      // Old format: individual parameters (backward compatibility)
+      email = arguments[0]
+      password = arguments[1]
+      name = arguments[2]
+      phone = arguments[3]
+      refCode = arguments[4] || null
+    }
     try {
       // Registration is FREE - no payment required
       // Referral code is optional (only for hierarchy mapping, no income)
@@ -192,12 +214,19 @@ export function AuthProvider({ children }) {
       const leaderCapMultiplier = programConfig.leaderCapMultiplier || 3.0
       const leaderCapAmount = leaderBaseAmount * leaderCapMultiplier
 
+      // Generate transaction password (6 digits)
+      const generateTransactionPassword = () => {
+        return Math.floor(100000 + Math.random() * 900000).toString()
+      }
+      const transactionPassword = generateTransactionPassword()
+
       // Create user data with Leader program activated
       const userData = {
         name,
         email,
         emailLower: normalizedEmail, // Store lowercase email for duplicate checking
         phone: phone.replace(/[\s\-\(\)]/g, ''), // Clean phone number
+        transactionPassword, // Store transaction password
         // refCode will be set to User ID in onUserCreated Cloud Function
         referredByUid: referredByUid, // Optional - only for hierarchy
         refCodeUsed: refCodeUsed, // Optional
@@ -213,7 +242,75 @@ export function AuthProvider({ children }) {
         activationDeadline: null, // Not needed for auto-activated Leader
       }
       
+      // Add optional fields if provided
+      if (panCard) {
+        userData.panNumber = panCard.toUpperCase()
+      }
+      if (country) {
+        userData.country = country
+      }
+      if (state) {
+        userData.state = state
+      }
+      
+      // Mark bank details as completed if provided during signup
+      if (bankDetails && bankDetails.accountNumber && bankDetails.bankName && bankDetails.branchName && bankDetails.ifscCode) {
+        userData.bankDetailsCompleted = true
+      }
+      
       await setDoc(doc(db, 'users', userId), userData)
+      
+      // Save bank details if provided
+      if (bankDetails && bankDetails.accountNumber) {
+        const accountNumberMasked = `XXXXXX${bankDetails.accountNumber.slice(-4)}`
+        const accountNumberLast4 = bankDetails.accountNumber.slice(-4)
+        
+        // Check if auto-verify is enabled
+        const verificationConfig = await getDoc(doc(db, 'adminConfig', 'verification'))
+        const autoVerifyBank = verificationConfig.exists() && verificationConfig.data()?.autoVerifyBank === true
+        
+        // Save to banks subcollection (new structure)
+        const bankData = {
+          paymentType: 'bank',
+          holderName: name, // Use signup name as account holder name
+          accountNumberMasked: accountNumberMasked,
+          accountNumberLast4: accountNumberLast4,
+          ifsc: bankDetails.ifscCode.toUpperCase(),
+          bankName: bankDetails.bankName,
+          branch: bankDetails.branchName,
+          accountType: 'savings', // Default to savings
+          isVerified: autoVerifyBank,
+          isPrimary: true,
+          createdAt: serverTimestamp(),
+          ...(autoVerifyBank && {
+            verifiedAt: new Date(),
+            verifiedBy: 'system',
+            adminRemarks: 'Auto-verified by system'
+          })
+        }
+        
+        await addDoc(collection(db, 'userFinancialProfiles', userId, 'banks'), bankData)
+        
+        // Also maintain legacy structure for backward compatibility
+        await setDoc(doc(db, 'userFinancialProfiles', userId), {
+          bank: {
+            accountNumberMasked: accountNumberMasked,
+            accountNumberLast4: accountNumberLast4,
+            bankName: bankDetails.bankName,
+            branch: bankDetails.branchName,
+            ifsc: bankDetails.ifscCode.toUpperCase(),
+            isVerified: autoVerifyBank
+          },
+          updatedAt: serverTimestamp()
+        }, { merge: true })
+        
+        // Update user's bankVerified status if auto-verify is enabled
+        if (autoVerifyBank) {
+          await updateDoc(doc(db, 'users', userId), {
+            bankVerified: true
+          })
+        }
+      }
       
       // Create user package for Leader
       const packageId = `leader_${userId}_${Date.now()}`
@@ -252,19 +349,26 @@ export function AuthProvider({ children }) {
       await sendEmailVerification(userCredential.user)
       
       // Generate User ID after signup
+      let generatedUserId = null
       try {
         const generateUserId = httpsCallable(functions, 'generateUserId')
         const result = await generateUserId()
         if (result?.data?.success && result.data.userId) {
-          // User ID will be shown in toast by AuthPage
-          return { user: userCredential.user, userId: result.data.userId }
+          generatedUserId = result.data.userId
         }
       } catch (error) {
         // Silently fail - User ID will be generated by onUserCreated trigger
         console.warn('User ID generation skipped (function may not be deployed yet):', error.message)
       }
       
-      return userCredential.user
+      // Return user data with credentials for success page
+      return { 
+        user: userCredential.user, 
+        userId: generatedUserId,
+        password: password, // Return password for success page
+        transactionPassword: transactionPassword,
+        name: name
+      }
     } catch (error) {
       throw error
     }

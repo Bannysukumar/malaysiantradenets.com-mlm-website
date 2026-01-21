@@ -108,7 +108,7 @@ export default function ChooseProgram() {
               Please complete your bank details first to proceed.
             </p>
             <button
-              onClick={() => navigate('/app/onboarding/bank-details')}
+              onClick={() => navigate('/app/profile')}
               className="btn-primary"
             >
               Complete Bank Details

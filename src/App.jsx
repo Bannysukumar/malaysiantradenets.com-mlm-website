@@ -22,6 +22,7 @@ import Contact from './pages/public/Contact'
 import AuthPage from './pages/public/AuthPage'
 import ForgotPassword from './pages/public/ForgotPassword'
 import ResetPassword from './pages/public/ResetPassword'
+import SignupSuccess from './pages/public/SignupSuccess'
 
 // User app
 import UserDashboard from './pages/user/Dashboard'
@@ -38,7 +39,6 @@ import UserTransferHistory from './pages/user/TransferHistory'
 import UserActivateUser from './pages/user/ActivateUser'
 import UserActivationHistory from './pages/user/ActivationHistory'
 import UserRenewal from './pages/user/Renewal'
-import UserBankDetailsOnboarding from './pages/user/BankDetailsOnboarding'
 import UserChooseProgram from './pages/user/ChooseProgram'
 import UserLevelTree from './pages/user/LevelTree'
 import MyTeamLayout from './layouts/MyTeamLayout'
@@ -117,6 +117,7 @@ function AppRoutes() {
         <Route path="auth" element={<AuthPage />} />
         <Route path="forgot-password" element={<ForgotPassword />} />
         <Route path="reset-password" element={<ResetPassword />} />
+        <Route path="signup-success" element={<SignupSuccess />} />
       </Route>
 
       {/* User app routes */}
@@ -133,7 +134,6 @@ function AppRoutes() {
         <Route path="activate-user" element={<UserActivateUser />} />
         <Route path="activation-history" element={<UserActivationHistory />} />
         <Route path="renewal" element={<UserRenewal />} />
-        <Route path="onboarding/bank-details" element={<UserBankDetailsOnboarding />} />
         <Route path="choose-program" element={<UserChooseProgram />} />
         <Route path="notifications" element={<UserNotifications />} />
         <Route path="support" element={<UserSupport />} />
@@ -208,7 +208,7 @@ function ProtectedRoute({ children, requireAdmin = false, requireSuperAdmin = fa
     
     if (loading) {
       return (
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center bg-black">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
         </div>
       )
@@ -238,18 +238,17 @@ function ProtectedRoute({ children, requireAdmin = false, requireSuperAdmin = fa
       // Check if user is blocked
       if (userData.status === 'AUTO_BLOCKED' || userData.status === 'blocked') {
         // Allow access to support page only
-        if (location !== '/app/support' && location !== '/app/onboarding/bank-details') {
+        if (location !== '/app/support') {
           return <Navigate to="/app/support" replace />
         }
       }
       
-      // Check if bank details are required (skip for onboarding pages and profile page)
+      // Check if bank details are required (skip for profile page where they can add it)
       // Allow profile page so user can view/edit their bank details
       if (!userData.bankDetailsCompleted && 
-          location !== '/app/onboarding/bank-details' && 
           location !== '/app/support' &&
           location !== '/app/profile') {
-        return <Navigate to="/app/onboarding/bank-details" replace />
+        return <Navigate to="/app/profile" replace />
       }
       
       // Check if program selection is required (skip for onboarding pages)
@@ -257,7 +256,6 @@ function ProtectedRoute({ children, requireAdmin = false, requireSuperAdmin = fa
           !userData.programType && 
           userData.status === 'PENDING_ACTIVATION' &&
           location !== '/app/choose-program' &&
-          location !== '/app/onboarding/bank-details' &&
           location !== '/app/support' &&
           location !== '/app/profile') {
         return <Navigate to="/app/choose-program" replace />

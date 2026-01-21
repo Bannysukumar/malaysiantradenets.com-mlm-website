@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useCollection, useFirestore } from '../../hooks/useFirestore'
 import { doc } from 'firebase/firestore'
@@ -10,6 +11,30 @@ export default function UserDashboard() {
   const { user, userData } = useAuth()
   const { data: userPackages } = useCollection('userPackages', [])
   const userId = user?.uid || userData?.uid
+  const [pageLoaded, setPageLoaded] = useState(false)
+
+  // Auto-refresh if page doesn't load within 3 seconds
+  useEffect(() => {
+    const loadTimer = setTimeout(() => {
+      if (!pageLoaded && user) {
+        // Page hasn't loaded properly, refresh
+        window.location.reload()
+      }
+    }, 3000)
+
+    return () => clearTimeout(loadTimer)
+  }, [pageLoaded, user])
+
+  // Mark page as loaded when component renders
+  useEffect(() => {
+    if (user) {
+      // Small delay to ensure content is actually rendered
+      const renderTimer = setTimeout(() => {
+        setPageLoaded(true)
+      }, 500)
+      return () => clearTimeout(renderTimer)
+    }
+  }, [user])
 
   // Get active packages for this user, prioritizing Investor plans over Leader Program
   const activePackages = userPackages.filter(pkg => pkg.status === 'active' && pkg.userId === userId)
@@ -67,8 +92,18 @@ export default function UserDashboard() {
   const isPendingActivation = userData?.status === 'PENDING_ACTIVATION'
   const isBlocked = userData?.status === 'AUTO_BLOCKED' || userData?.status === 'blocked'
 
+  // Show loading only if we don't have user (ProtectedRoute should handle this, but just in case)
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  // Render immediately - don't wait for userData
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full">
       {/* Welcome Header */}
       <div className="flex items-center justify-between">
         <div>
