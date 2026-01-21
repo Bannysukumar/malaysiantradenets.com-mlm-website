@@ -70,12 +70,26 @@ export default function ForgotPassword() {
       }
 
       // Send password reset email
-      await sendPasswordResetEmail(auth, email, {
-        url: `${window.location.origin}/reset-password`,
-        handleCodeInApp: false
-      })
-      setEmailSent(true)
-      toast.success('Password reset email sent! Please check your inbox.')
+      // Try with custom URL first
+      try {
+        await sendPasswordResetEmail(auth, email, {
+          url: `${window.location.origin}/reset-password`,
+          handleCodeInApp: true
+        })
+        setEmailSent(true)
+        toast.success('Password reset email sent! Please check your inbox.')
+      } catch (urlError) {
+        // If domain not allowlisted, try without custom URL (uses Firebase default)
+        if (urlError.code === 'auth/unauthorized-continue-uri') {
+          console.warn('Custom URL not allowlisted, using default Firebase URL')
+          // Retry without custom URL - Firebase will use its default redirect
+          await sendPasswordResetEmail(auth, email)
+          setEmailSent(true)
+          toast.success('Password reset email sent! Please check your inbox and click the link to reset your password.')
+        } else {
+          throw urlError // Re-throw if it's a different error
+        }
+      }
     } catch (error) {
       console.error('Password reset error:', error)
       // Don't reveal if email exists or not for security
@@ -83,6 +97,8 @@ export default function ForgotPassword() {
         toast.error('If an account exists with this email/User ID, a password reset link has been sent.')
       } else if (error.code === 'auth/invalid-email') {
         toast.error('Invalid email address or User ID')
+      } else if (error.code === 'auth/unauthorized-continue-uri') {
+        toast.error('Domain configuration error. Please contact support.')
       } else {
         toast.error('Error sending password reset email. Please try again.')
       }
