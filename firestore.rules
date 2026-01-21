@@ -155,8 +155,12 @@ service cloud.firestore {
     
     // Payouts - users can read own, admin can read/write all, Cloud Functions can create
     match /payouts/{payoutId} {
-      allow read: if isAuthenticated() && 
-                     (resource.data.userId == request.auth.uid || isAdmin());
+      // Admins can read all payouts (needed for list queries)
+      // Non-admins can only read their own payouts (for single document reads)
+      allow read: if isAdmin() || 
+                     (isAuthenticated() && 
+                      resource != null && 
+                      resource.data.userId == request.auth.uid);
       allow create: if true; // Cloud Functions can create (server-side)
       allow update: if isAdmin();
       allow delete: if isSuperAdmin();
@@ -171,10 +175,17 @@ service cloud.firestore {
       
       // Banks subcollection - users can read/write own banks, admin can read/write all
       match /banks/{bankId} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) || isAdmin();
-        allow update: if isOwner(userId) || isAdmin();
-        allow delete: if isOwner(userId) || isAdmin();
+        // Admins can read all banks (needed for list queries across users)
+        // Non-admins can only read their own banks (userId from parent path)
+        allow read: if isAdmin() || 
+                       (isAuthenticated() && 
+                        request.auth.uid == userId);
+        allow create: if isAdmin() || 
+                         (isAuthenticated() && request.auth.uid == userId);
+        allow update: if isAdmin() || 
+                         (isAuthenticated() && request.auth.uid == userId);
+        allow delete: if isAdmin() || 
+                         (isAuthenticated() && request.auth.uid == userId);
       }
     }
     

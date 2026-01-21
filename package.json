@@ -34,7 +34,7 @@
     "preview": "vite preview",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "create-admin": "node createAdmin.cjs",
-    "deploy:rules": "firebase deploy --only firestore:rules,storage:rules",
+    "deploy:rules": "firebase deploy --only firestore:rules",
     "deploy:indexes": "firebase deploy --only firestore:indexes",
     "deploy:firestore": "firebase deploy --only firestore",
     "deploy:storage": "firebase deploy --only storage:rules",

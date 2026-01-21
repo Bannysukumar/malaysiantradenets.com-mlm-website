@@ -123,7 +123,7 @@ export default function AdminLayout() {
     <div className="min-h-screen bg-dark">
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-64 bg-dark-light min-h-screen border-r border-gray-800 p-4 overflow-y-auto">
+        <aside className="w-64 bg-dark-light border-r border-gray-800 p-4 sticky top-0 h-screen overflow-y-auto">
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-primary">Admin Panel</h1>
             <p className="text-sm text-gray-400">{userData?.name || 'Admin'}</p>
@@ -170,7 +170,7 @@ export default function AdminLayout() {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 p-8 overflow-y-auto">
+        <main className="flex-1 p-8 overflow-y-auto h-screen">
           <Outlet />
         </main>
       </div>
