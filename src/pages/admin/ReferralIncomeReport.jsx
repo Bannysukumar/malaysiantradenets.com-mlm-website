@@ -3,7 +3,7 @@ import { useCollection } from '../../hooks/useFirestore'
 import { query, where, orderBy, collection } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import toast from 'react-hot-toast'
-import { DollarSign, Download, Filter, TrendingUp, Users } from 'lucide-react'
+import { IndianRupee, Download, Filter, TrendingUp, Users } from 'lucide-react'
 import { formatCurrency, formatDate } from '../../utils/helpers'
 import { Link } from 'react-router-dom'
 
@@ -171,7 +171,7 @@ export default function AdminReferralIncomeReport() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold flex items-center gap-2">
-          <DollarSign className="text-primary" size={32} />
+          <IndianRupee className="text-primary" size={32} />
           Referral Income Report
         </h1>
         <button
@@ -304,7 +304,7 @@ export default function AdminReferralIncomeReport() {
         <h2 className="text-xl font-bold mb-4">Referral Income Details</h2>
         {filteredEntries.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
-            <DollarSign className="mx-auto mb-4" size={48} />
+            <IndianRupee className="mx-auto mb-4" size={48} />
             <p>No referral income entries found</p>
           </div>
         ) : (

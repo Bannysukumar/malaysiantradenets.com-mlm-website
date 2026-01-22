@@ -3,7 +3,7 @@ import { doc, setDoc } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
-import { DollarSign, Calendar, Clock, AlertCircle, CheckCircle, Settings } from 'lucide-react'
+import { IndianRupee, Calendar, Clock, AlertCircle, CheckCircle, Settings } from 'lucide-react'
 import { useEffect } from 'react'
 
 export default function AdminPayoutSettings() {
@@ -89,7 +89,7 @@ export default function AdminPayoutSettings() {
   return (
     <div>
       <h1 className="text-3xl font-bold mb-8 flex items-center gap-2">
-        <DollarSign className="text-primary" size={32} />
+        <IndianRupee className="text-primary" size={32} />
         Payout Settings
       </h1>
 
@@ -235,7 +235,7 @@ export default function AdminPayoutSettings() {
         {enableWeeklyPayouts && (
           <div className="card">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <DollarSign className="text-primary" size={24} />
+              <IndianRupee className="text-primary" size={24} />
               Admin Charges Configuration
             </h2>
             <div className="space-y-4">

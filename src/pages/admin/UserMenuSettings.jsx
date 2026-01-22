@@ -11,7 +11,7 @@ import {
   Bell, 
   HelpCircle,
   Wallet,
-  DollarSign,
+  IndianRupee,
   ArrowUpCircle,
   Send,
   History,
@@ -62,7 +62,7 @@ const MENU_ITEMS = [
     key: 'incomeHistory', 
     path: '/app/income-history', 
     label: 'Income History', 
-    icon: DollarSign,
+    icon: IndianRupee,
     defaultEnabled: true 
   },
   { 

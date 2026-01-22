@@ -4,7 +4,7 @@ import { useCollection } from '../../hooks/useFirestore'
 import { query, where, orderBy, collection } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import { formatCurrency, formatDate } from '../../utils/helpers'
-import { DollarSign, Filter, Download, TrendingUp, Calendar, CheckCircle, Clock, XCircle } from 'lucide-react'
+import { IndianRupee, Filter, Download, TrendingUp, Calendar, CheckCircle, Clock, XCircle } from 'lucide-react'
 import { format } from 'date-fns'
 
 export default function IncomeHistory() {
@@ -117,7 +117,7 @@ export default function IncomeHistory() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent flex items-center gap-3">
-            <DollarSign className="text-primary" size={36} />
+            <IndianRupee className="text-primary" size={36} />
             Income History
           </h1>
           <p className="text-gray-400">Track all your earnings and income sources</p>
@@ -165,7 +165,7 @@ export default function IncomeHistory() {
               <p className="text-xs text-gray-500 mt-1">Total entries</p>
             </div>
             <div className="p-3 bg-blue-500/10 rounded-xl">
-              <DollarSign className="text-blue-500" size={28} />
+              <IndianRupee className="text-blue-500" size={28} />
             </div>
           </div>
         </div>
@@ -251,7 +251,7 @@ export default function IncomeHistory() {
               <tr>
                 <td colSpan="6" className="text-center py-12">
                   <div className="p-4 bg-primary/10 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
-                    <DollarSign className="text-primary" size={40} />
+                    <IndianRupee className="text-primary" size={40} />
                   </div>
                   <p className="text-gray-400 text-lg mb-2">No income entries found</p>
                   <p className="text-gray-500 text-sm">Try adjusting your filters</p>

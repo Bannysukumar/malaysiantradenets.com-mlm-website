@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import { 
   Users, Search, Plus, Download, UserCheck, UserX, 
   Save, Lock, Ban, Eye, Check, X, ChevronDown, ChevronRight,
-  LayoutDashboard, FileText, Package, DollarSign, Wallet,
+  LayoutDashboard, FileText, Package, IndianRupee, Wallet,
   ArrowUpCircle, FileCheck, TreePine, Settings, Database
 } from 'lucide-react'
 import { formatDate } from '../../utils/helpers'
@@ -21,8 +21,8 @@ const PERMISSION_GROUPS = {
   packages: { label: 'Packages', icon: Package, path: '/admin/packages' },
   packageRequests: { label: 'Package Requests', icon: Package, path: '/admin/activations' },
   withdrawals: { label: 'Withdrawals', icon: ArrowUpCircle, path: '/admin/withdrawals' },
-  reports: { label: 'Reports', icon: DollarSign, path: '/admin/reports' },
-  payoutReports: { label: 'Payout Reports', icon: DollarSign, path: '/admin/payout-reports' },
+  reports: { label: 'Reports', icon: IndianRupee, path: '/admin/reports' },
+  payoutReports: { label: 'Payout Reports', icon: IndianRupee, path: '/admin/payout-reports' },
   levelTree: { label: 'Level Tree', icon: TreePine, path: '/admin/level-tree' },
   content: { label: 'Content Pages', icon: FileText, path: '/admin/content' },
   migration: { label: 'Migration', icon: Database, path: '/admin/migration' }

@@ -3,7 +3,7 @@ import { doc, setDoc } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
-import { Settings, DollarSign, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react'
+import { Settings, IndianRupee, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react'
 import { useEffect } from 'react'
 
 export default function AdminProgramSettings() {
@@ -108,7 +108,7 @@ export default function AdminProgramSettings() {
         {enableInvestorProgram && (
           <div className="card">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <DollarSign className="text-primary" size={24} />
+              <IndianRupee className="text-primary" size={24} />
               Investor Program Configuration
             </h2>
             <div className="space-y-4">

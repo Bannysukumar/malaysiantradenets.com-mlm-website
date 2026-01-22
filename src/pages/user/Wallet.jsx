@@ -2,7 +2,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useFirestore } from '../../hooks/useFirestore'
 import { doc } from 'firebase/firestore'
 import { db } from '../../config/firebase'
-import { Wallet, DollarSign, TrendingUp, Clock, ArrowUpCircle, History, Info, Sparkles } from 'lucide-react'
+import { Wallet, IndianRupee, TrendingUp, Clock, ArrowUpCircle, History, Info, Sparkles } from 'lucide-react'
 import { formatCurrency } from '../../utils/helpers'
 import { Link } from 'react-router-dom'
 
@@ -99,7 +99,7 @@ export default function UserWallet() {
               <p className="text-xs text-gray-500 mt-1">All time withdrawals</p>
             </div>
             <div className="p-3 bg-blue-500/10 rounded-xl">
-              <DollarSign className="text-blue-500" size={28} />
+              <IndianRupee className="text-blue-500" size={28} />
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, DollarSign } from 'lucide-react'
+import { ChevronDown, ChevronRight, IndianRupee } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { hasActionPermission } from '../utils/permissions'
 
@@ -45,7 +45,7 @@ export default function PayoutReportsLayout() {
               className="w-full flex items-center justify-between px-4 py-3 rounded-lg text-gray-300 hover:bg-dark-lighter transition-colors"
             >
               <div className="flex items-center gap-3">
-                <DollarSign size={20} />
+                <IndianRupee size={20} />
                 <span className="font-semibold">Payout Reports</span>
               </div>
               {expanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}

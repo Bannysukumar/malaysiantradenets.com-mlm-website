@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { TrendingUp, Users, DollarSign, ArrowRight, Layers, Percent } from 'lucide-react'
+import { TrendingUp, Users, IndianRupee, ArrowRight, Layers, Percent } from 'lucide-react'
 
 export default function MarketingPlan() {
   const incomeLevels = [
@@ -83,7 +83,7 @@ export default function MarketingPlan() {
         <div className="card bg-gradient-to-r from-primary/10 to-transparent border-primary/20 mb-16">
           <div className="flex flex-col md:flex-row items-center gap-6">
             <div className="p-6 bg-primary/20 rounded-xl">
-              <DollarSign className="text-primary" size={48} />
+              <IndianRupee className="text-primary" size={48} />
             </div>
             <div className="flex-1 text-center md:text-left">
               <h3 className="text-3xl font-bold mb-2 text-white">

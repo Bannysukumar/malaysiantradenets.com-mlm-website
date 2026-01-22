@@ -5,7 +5,7 @@ import { doc, collection, query, where, getDocs, addDoc, serverTimestamp } from 
 import { db } from '../../config/firebase'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
-import { Wallet, DollarSign, AlertCircle, Info, ArrowUpCircle, CreditCard, Smartphone, CheckCircle } from 'lucide-react'
+import { Wallet, IndianRupee, AlertCircle, Info, ArrowUpCircle, CreditCard, Smartphone, CheckCircle } from 'lucide-react'
 import { formatCurrency } from '../../utils/helpers'
 import { validateWithdrawalAmount } from '../../utils/validation'
 import { httpsCallable } from 'firebase/functions'
@@ -226,7 +226,7 @@ export default function UserWithdraw() {
         <div className="lg:col-span-2">
           <div className="card">
             <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-              <DollarSign className="text-primary" size={24} />
+              <IndianRupee className="text-primary" size={24} />
               Withdrawal Details
             </h2>
 

@@ -2,7 +2,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useFirestore, useCollection } from '../../hooks/useFirestore'
 import { doc, query, where, orderBy, collection } from 'firebase/firestore'
 import { db } from '../../config/firebase'
-import { Copy, Users, DollarSign, AlertCircle, History, Share2, TrendingUp, Sparkles, ArrowRight } from 'lucide-react'
+import { Copy, Users, IndianRupee, AlertCircle, History, Share2, TrendingUp, Sparkles, ArrowRight } from 'lucide-react'
 import { getReferralLink, formatCurrency, formatDate } from '../../utils/helpers'
 import toast from 'react-hot-toast'
 import { useState, useMemo } from 'react'
@@ -168,7 +168,7 @@ export default function UserReferrals() {
                   <p className="text-xs text-gray-500 mt-1">Lifetime earned</p>
                 </div>
                 <div className="p-3 bg-green-500/10 rounded-xl">
-                  <DollarSign className="text-green-500" size={28} />
+                  <IndianRupee className="text-green-500" size={28} />
                 </div>
               </div>
             </div>
@@ -265,7 +265,7 @@ export default function UserReferrals() {
             ) : !incomeEntries || incomeEntries.length === 0 ? (
               <div className="text-center py-12">
                 <div className="p-4 bg-primary/10 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
-                  <DollarSign className="text-primary" size={40} />
+                  <IndianRupee className="text-primary" size={40} />
                 </div>
                 <p className="text-gray-400 text-lg mb-2">No referral income yet</p>
                 <p className="text-gray-500 text-sm">Referrals will appear here when they activate as Investors.</p>

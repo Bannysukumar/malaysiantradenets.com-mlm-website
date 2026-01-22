@@ -630,7 +630,8 @@ export default function AuthPage() {
                   type={showPassword ? 'text' : 'password'}
                   {...register('password', { 
                     required: 'Password is required',
-                    validate: (value) => validatePassword(value, {
+                    // Only validate password format during signup, not login
+                    validate: isLogin ? undefined : (value) => validatePassword(value, {
                       minLength: 8,
                       requireUppercase: true,
                       requireNumber: true

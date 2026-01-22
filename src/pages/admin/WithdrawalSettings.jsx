@@ -3,7 +3,7 @@ import { doc, setDoc } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
-import { Settings, DollarSign, Calendar, Shield } from 'lucide-react'
+import { Settings, IndianRupee, Calendar, Shield } from 'lucide-react'
 
 export default function AdminWithdrawalSettings() {
   const { data: withdrawalConfig, loading } = useFirestore(doc(db, 'adminConfig', 'withdrawals'))
@@ -73,7 +73,7 @@ export default function AdminWithdrawalSettings() {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className="card">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <DollarSign className="text-primary" size={24} />
+            <IndianRupee className="text-primary" size={24} />
             Amount Limits
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -100,7 +100,7 @@ export default function AdminWithdrawalSettings() {
 
         <div className="card">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <DollarSign className="text-primary" size={24} />
+            <IndianRupee className="text-primary" size={24} />
             Fees
           </h2>
           <div className="space-y-4">

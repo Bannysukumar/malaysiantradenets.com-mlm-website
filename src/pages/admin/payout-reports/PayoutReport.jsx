@@ -9,7 +9,7 @@ import { formatDate, formatCurrency } from '../../../utils/helpers'
 import { useAuth } from '../../../contexts/AuthContext'
 import { hasActionPermission } from '../../../utils/permissions'
 import toast from 'react-hot-toast'
-import { Eye, DollarSign } from 'lucide-react'
+import { Eye, IndianRupee } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 export default function PayoutReport() {
@@ -258,7 +258,7 @@ export default function PayoutReport() {
                               toast.info('Payment form will open here')
                             }}
                           >
-                            <DollarSign size={14} />
+                            <IndianRupee size={14} />
                             Pay Now
                           </button>
                         )}

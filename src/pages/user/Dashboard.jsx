@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useCollection, useFirestore } from '../../hooks/useFirestore'
 import { doc } from 'firebase/firestore'
 import { db } from '../../config/firebase'
-import { Package, Users, DollarSign, Wallet, AlertCircle, RefreshCw, TrendingUp, ArrowRight, Sparkles } from 'lucide-react'
+import { Package, Users, IndianRupee, Wallet, AlertCircle, RefreshCw, TrendingUp, ArrowRight, Sparkles } from 'lucide-react'
 import { formatCurrency } from '../../utils/helpers'
 import { Link } from 'react-router-dom'
 
@@ -231,7 +231,7 @@ export default function UserDashboard() {
               </Link>
             </div>
             <div className="p-3 bg-primary/10 rounded-xl">
-              <DollarSign className="text-primary" size={28} />
+              <IndianRupee className="text-primary" size={28} />
             </div>
           </div>
         </div>

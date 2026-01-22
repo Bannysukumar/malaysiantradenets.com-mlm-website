@@ -1,5 +1,5 @@
 import { useCollection } from '../../hooks/useFirestore'
-import { Users, Package, DollarSign, TrendingUp, UserX, UserCheck, Calendar } from 'lucide-react'
+import { Users, Package, IndianRupee, TrendingUp, UserX, UserCheck, Calendar } from 'lucide-react'
 import { useMemo } from 'react'
 import { formatCurrency } from '../../utils/helpers'
 
@@ -130,7 +130,7 @@ export default function AdminDashboard() {
               <p className="text-gray-400 text-sm mb-1">Total Investment</p>
               <p className="text-2xl font-bold text-white">{formatCurrency(metrics.totalInvest, 'INR')}</p>
             </div>
-            <DollarSign className="text-green-500" size={32} />
+            <IndianRupee className="text-green-500" size={32} />
           </div>
         </div>
 

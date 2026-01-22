@@ -3,7 +3,7 @@ import { doc, setDoc } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
-import { DollarSign } from 'lucide-react'
+import { IndianRupee } from 'lucide-react'
 
 export default function AdminIncomeRules() {
   const { data: incomeRules, loading } = useFirestore(doc(db, 'incomeRules', 'main'))
@@ -52,7 +52,7 @@ export default function AdminIncomeRules() {
   return (
     <div>
       <h1 className="text-3xl font-bold mb-8 flex items-center gap-2">
-        <DollarSign className="text-primary" size={32} />
+        <IndianRupee className="text-primary" size={32} />
         Income Rules Configuration
       </h1>
 

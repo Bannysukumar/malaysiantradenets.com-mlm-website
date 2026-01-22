@@ -5522,3 +5522,362 @@ exports.importPayouts = functions.https.onCall(async (data, context) => {
 
 // Auto-generate User ID when user document is created (if missing)
 
+// Import Active Members from CSV with Mobile + Password login support
+exports.importActiveMembersFromCSV = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+  if (!adminDoc.exists || adminDoc.data().role !== 'superAdmin') {
+    throw new functions.https.HttpsError('permission-denied', 'Only superAdmin can import active members');
+  }
+
+  try {
+    const { users, migrationBatchId } = data;
+    const batchId = migrationBatchId || `active_members_${Date.now()}`;
+    let inserted = 0;
+    let skipped = 0;
+    const errorRows = [];
+    const docIds = [];
+
+    const auth = admin.auth();
+
+    // Helper function to parse date
+    const parseDate = (dateStr) => {
+      if (!dateStr) return null;
+      try {
+        // Handle formats like "24 December 2025" or "24/12/2025"
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return null;
+        return admin.firestore.Timestamp.fromDate(date);
+      } catch (error) {
+        return null;
+      }
+    };
+
+    for (let i = 0; i < users.length; i++) {
+      const userData = users[i];
+      const row = i + 1;
+
+      try {
+        // Validate required fields
+        if (!userData.ID || !userData.ID.trim()) {
+          errorRows.push({ row, userId: 'N/A', message: 'ID is required' });
+          continue;
+        }
+
+        if (!userData.Mobile || !userData.Mobile.trim()) {
+          errorRows.push({ row, userId: userData.ID, message: 'Mobile is required' });
+          continue;
+        }
+
+        if (!userData.Password || !userData.Password.trim()) {
+          errorRows.push({ row, userId: userData.ID, message: 'Password is required' });
+          continue;
+        }
+
+        const userId = userData.ID.trim().toUpperCase();
+        const mobile = userData.Mobile.trim().replace(/[\s\-\(\)]/g, '');
+        const password = userData.Password.trim();
+        const name = (userData.Name || '').trim();
+        const investedAmount = parseFloat(userData['Invested Amount'] || 0);
+        const referredBy = (userData['Referred By'] || '').trim().toUpperCase();
+        const joinDate = parseDate(userData['Join Date']);
+        const status = (userData.Status || 'Active').trim().toUpperCase();
+
+        // Check if user already exists by userId (Option A: Skip)
+        const existingUserQuery = await db.collection('users')
+          .where('userId', '==', userId)
+          .limit(1)
+          .get();
+
+        if (!existingUserQuery.empty) {
+          console.log(`Skipping user ${userId} - already exists`);
+          skipped++;
+          continue;
+        }
+
+        // Generate email for migrated user: {mobile}@migrated.mtn
+        const email = `${mobile}@migrated.mtn`;
+
+        // Check if email already exists in Firebase Auth
+        let firebaseUser;
+        try {
+          firebaseUser = await auth.getUserByEmail(email);
+          // If user exists, skip (Option A)
+          console.log(`Skipping user ${userId} - email already exists`);
+          skipped++;
+          continue;
+        } catch (error) {
+          if (error.code === 'auth/user-not-found') {
+            // Create new Firebase Auth user
+            firebaseUser = await auth.createUser({
+              email: email,
+              password: password,
+              displayName: name,
+              emailVerified: true, // Skip email verification
+              disabled: false
+            });
+
+            // Set custom claims to skip password reset
+            await auth.setCustomUserClaims(firebaseUser.uid, {
+              isMigrated: true,
+              requiresPasswordReset: false
+            });
+          } else {
+            throw error;
+          }
+        }
+
+        const uid = firebaseUser.uid;
+
+        // Prepare user document
+        const userDoc = {
+          userId: userId,
+          userIdLower: userId.toLowerCase(),
+          name: name,
+          email: email,
+          emailLower: email.toLowerCase(),
+          phone: mobile,
+          programType: 'investor',
+          status: status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
+          role: 'user',
+          isMigrated: true,
+          migrationBatchId: batchId,
+          emailVerified: true,
+          requiresPasswordReset: false,
+          createdAt: joinDate || admin.firestore.FieldValue.serverTimestamp(),
+          walletBalance: 0,
+          pendingBalance: 0,
+          lifetimeEarned: 0,
+          lifetimeWithdrawn: 0,
+          bankDetailsCompleted: false,
+          refCode: userId, // Set refCode to userId
+        };
+
+        // Handle sponsor relationship
+        if (referredBy && referredBy !== 'SUPERADMIN' && referredBy !== '') {
+          const sponsorQuery = await db.collection('users')
+            .where('userId', '==', referredBy)
+            .limit(1)
+            .get();
+          
+          if (!sponsorQuery.empty) {
+            const sponsorUid = sponsorQuery.docs[0].id;
+            userDoc.referredByUid = sponsorUid;
+            userDoc.sponsorUserId = referredBy;
+          } else {
+            // Sponsor doesn't exist yet, store the sponsor ID for later linking
+            userDoc.sponsorUserId = referredBy;
+            console.log(`Warning: Sponsor ${referredBy} not found for user ${userId}`);
+          }
+        }
+
+        // Create user document
+        await db.collection('users').doc(uid).set(userDoc);
+        inserted++;
+        docIds.push(uid);
+
+        // Create userIdIndex entry for login lookup
+        await db.collection('userIdIndex').doc(userId).set({
+          uid: uid,
+          email: email,
+          phone: mobile,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Create wallet document
+        await db.collection('wallets').doc(uid).set({
+          availableBalance: 0,
+          pendingBalance: 0,
+          lifetimeEarned: 0,
+          lifetimeWithdrawn: 0,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        // Create user package if invest amount provided
+        if (investedAmount > 0) {
+          const userPackageId = `migration_${uid}_${Date.now()}`;
+          await db.collection('userPackages').doc(userPackageId).set({
+            userId: uid,
+            packageId: 'MIGRATED',
+            packageName: 'Migrated Package',
+            amount: investedAmount,
+            currency: 'INR',
+            status: 'active',
+            activatedAt: joinDate || admin.firestore.FieldValue.serverTimestamp(),
+            paymentMethod: 'migration',
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
+
+        // Build tree relationships (update sponsor's directCount)
+        if (userDoc.referredByUid) {
+          const sponsorRef = db.collection('users').doc(userDoc.referredByUid);
+          const sponsorDoc = await sponsorRef.get();
+          if (sponsorDoc.exists) {
+            const currentDirects = sponsorDoc.data().directReferrals || 0;
+            await sponsorRef.update({
+              directReferrals: currentDirects + 1
+            });
+          }
+        }
+
+        console.log(`✅ Imported user ${userId} (${name})`);
+
+      } catch (error) {
+        console.error(`Error importing user row ${row}:`, error);
+        errorRows.push({
+          row,
+          userId: userData.ID || 'N/A',
+          message: error.message || 'Unknown error'
+        });
+      }
+    }
+
+    // Create migration batch record
+    await db.collection('migrationBatches').doc(batchId).set({
+      batchId,
+      type: 'active_members',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: context.auth.uid,
+      inserted,
+      skipped,
+      errorRows,
+      docIds,
+      totalUsers: users.length
+    });
+
+    return {
+      success: true,
+      batchId,
+      inserted,
+      skipped,
+      errors: errorRows.length,
+      totalUsers: users.length
+    };
+  } catch (error) {
+    console.error('Import error:', error);
+    throw new functions.https.HttpsError('internal', 'Import failed: ' + error.message);
+  }
+});
+
+// Remove migrated users by batch ID
+exports.removeMigratedUsers = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+  if (!adminDoc.exists || adminDoc.data().role !== 'superAdmin') {
+    throw new functions.https.HttpsError('permission-denied', 'Only superAdmin can remove migrated users');
+  }
+
+  try {
+    const { migrationBatchId } = data;
+    
+    if (!migrationBatchId) {
+      throw new functions.https.HttpsError('invalid-argument', 'migrationBatchId is required');
+    }
+
+    // Find all users with this migration batch ID
+    const usersQuery = await db.collection('users')
+      .where('migrationBatchId', '==', migrationBatchId)
+      .where('isMigrated', '==', true)
+      .get();
+
+    if (usersQuery.empty) {
+      return {
+        success: true,
+        deleted: 0,
+        message: `No users found with migrationBatchId: ${migrationBatchId}`
+      };
+    }
+
+    const auth = admin.auth();
+    let deleted = 0;
+    const errors = [];
+
+    // Delete each user
+    for (const userDoc of usersQuery.docs) {
+      try {
+        const uid = userDoc.id;
+        const userData = userDoc.data();
+        const userId = userData.userId;
+
+        // Delete from Firebase Auth
+        try {
+          await auth.deleteUser(uid);
+        } catch (error) {
+          if (error.code !== 'auth/user-not-found') {
+            throw error;
+          }
+        }
+
+        // Delete userIdIndex
+        if (userId) {
+          try {
+            await db.collection('userIdIndex').doc(userId).delete();
+          } catch (error) {
+            console.error(`Error deleting userIdIndex for ${userId}:`, error);
+          }
+        }
+
+        // Delete user document
+        await db.collection('users').doc(uid).delete();
+
+        // Delete wallet
+        try {
+          await db.collection('wallets').doc(uid).delete();
+        } catch (error) {
+          console.error(`Error deleting wallet for ${uid}:`, error);
+        }
+
+        // Delete user packages
+        const packagesQuery = await db.collection('userPackages')
+          .where('userId', '==', uid)
+          .get();
+        for (const packageDoc of packagesQuery.docs) {
+          await packageDoc.ref.delete();
+        }
+
+        deleted++;
+        console.log(`✅ Deleted user ${userId} (${uid})`);
+
+      } catch (error) {
+        console.error(`Error deleting user ${userDoc.id}:`, error);
+        errors.push({
+          userId: userDoc.data().userId || userDoc.id,
+          message: error.message
+        });
+      }
+    }
+
+    // Update migration batch record
+    try {
+      const batchDoc = await db.collection('migrationBatches').doc(migrationBatchId).get();
+      if (batchDoc.exists) {
+        await batchDoc.ref.update({
+          deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+          deletedBy: context.auth.uid,
+          deletedCount: deleted
+        });
+      }
+    } catch (error) {
+      console.error('Error updating migration batch:', error);
+    }
+
+    return {
+      success: true,
+      deleted,
+      errors: errors.length,
+      errorDetails: errors
+    };
+  } catch (error) {
+    console.error('Remove error:', error);
+    throw new functions.https.HttpsError('internal', 'Remove failed: ' + error.message);
+  }
+});
+

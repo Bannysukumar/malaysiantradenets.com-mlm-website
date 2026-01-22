@@ -3,7 +3,7 @@ import { useCollection } from '../../hooks/useFirestore'
 import { doc, updateDoc, query, where } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import toast from 'react-hot-toast'
-import { DollarSign, Search, CheckCircle, XCircle, Clock, Filter } from 'lucide-react'
+import { IndianRupee, Search, CheckCircle, XCircle, Clock, Filter } from 'lucide-react'
 import { formatCurrency, formatDate } from '../../utils/helpers'
 import { format } from 'date-fns'
 
@@ -117,7 +117,7 @@ export default function AdminWithdrawals() {
   return (
     <div>
       <h1 className="text-3xl font-bold mb-8 flex items-center gap-2">
-        <DollarSign className="text-primary" size={32} />
+        <IndianRupee className="text-primary" size={32} />
         Withdrawal Management
       </h1>
 

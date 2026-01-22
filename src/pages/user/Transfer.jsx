@@ -5,7 +5,7 @@ import { doc, collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
-import { Send, AlertCircle, Wallet, DollarSign, Mail, Info, CheckCircle } from 'lucide-react'
+import { Send, AlertCircle, Wallet, IndianRupee, Mail, Info, CheckCircle } from 'lucide-react'
 import { formatCurrency } from '../../utils/helpers'
 import { validateEmail } from '../../utils/validation'
 
@@ -233,7 +233,7 @@ export default function UserTransfer() {
                   Amount <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                  <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                   <input
                     type="number"
                     step="0.01"

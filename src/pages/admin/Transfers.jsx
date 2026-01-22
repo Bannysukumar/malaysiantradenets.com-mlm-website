@@ -3,7 +3,7 @@ import { useCollection } from '../../hooks/useFirestore'
 import { query, where, orderBy } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import { formatCurrency, formatDate } from '../../utils/helpers'
-import { DollarSign, Search, Filter, Ban } from 'lucide-react'
+import { IndianRupee, Search, Filter, Ban } from 'lucide-react'
 
 export default function AdminTransfers() {
   const [statusFilter, setStatusFilter] = useState('all')
@@ -49,7 +49,7 @@ export default function AdminTransfers() {
   return (
     <div>
       <h1 className="text-3xl font-bold mb-8 flex items-center gap-2">
-        <DollarSign className="text-primary" size={32} />
+        <IndianRupee className="text-primary" size={32} />
         Transfer Management
       </h1>
 

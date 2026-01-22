@@ -3,7 +3,7 @@ import { doc, setDoc } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
-import { Settings, DollarSign, Users, Shield, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Settings, IndianRupee, Users, Shield, ToggleLeft, ToggleRight } from 'lucide-react'
 
 export default function AdminFeatureSettings() {
   const { data: featureConfig, loading } = useFirestore(doc(db, 'adminConfig', 'features'))
@@ -78,7 +78,7 @@ export default function AdminFeatureSettings() {
         {/* User Transfers Section */}
         <div className="card">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <DollarSign className="text-primary" size={24} />
+            <IndianRupee className="text-primary" size={24} />
             User-to-User Transfers
           </h2>
           <div className="space-y-4">

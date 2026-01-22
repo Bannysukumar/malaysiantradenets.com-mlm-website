@@ -3,7 +3,7 @@ import { doc, setDoc } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
-import { Settings, RefreshCw, DollarSign, Shield, AlertCircle } from 'lucide-react'
+import { Settings, RefreshCw, IndianRupee, Shield, AlertCircle } from 'lucide-react'
 
 export default function AdminRenewalSettings() {
   const { data: renewalConfig, loading } = useFirestore(doc(db, 'adminConfig', 'renewals'))
@@ -153,7 +153,7 @@ export default function AdminRenewalSettings() {
 
         <div className="card">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <DollarSign className="text-primary" size={24} />
+            <IndianRupee className="text-primary" size={24} />
             Eligible Income Types
           </h2>
           <div className="space-y-2">

@@ -44,7 +44,7 @@ async function seedData() {
 
   await db.collection('pages').doc('why-choose-us').set({
     benefits: [
-      { icon: 'DollarSign', title: 'Dual Income', description: 'Multiple income streams from packages and referrals' },
+      { icon: 'IndianRupee', title: 'Dual Income', description: 'Multiple income streams from packages and referrals' },
       { icon: 'Coins', title: 'INR & Crypto Friendly', description: 'Support for both traditional and digital currencies' },
       { icon: 'Wallet', title: 'Instant Wallet Credit', description: 'Fast and secure wallet transactions' },
       { icon: 'Gift', title: 'Excellent Bonanzas', description: 'Regular bonuses and special promotions' },

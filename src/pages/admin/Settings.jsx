@@ -4,7 +4,7 @@ import { doc, setDoc } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
-import { Settings as SettingsIcon, Shield, DollarSign, Search, CheckCircle2 } from 'lucide-react'
+import { Settings as SettingsIcon, Shield, IndianRupee, Search, CheckCircle2 } from 'lucide-react'
 
 export default function AdminSettings() {
   const { data: settings, loading: settingsLoading } = useFirestore(doc(db, 'settings', 'main'))
@@ -141,7 +141,7 @@ export default function AdminSettings() {
 
         <div className="card">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <DollarSign className="text-primary" size={24} />
+            <IndianRupee className="text-primary" size={24} />
             Payment & Wallet Settings
           </h2>
           <div className="space-y-4">

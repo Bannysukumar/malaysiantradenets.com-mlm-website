@@ -4,7 +4,7 @@ import { db } from '../../config/firebase'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
-import { Settings, DollarSign, AlertCircle, CheckCircle, Shield, Plus, X } from 'lucide-react'
+import { Settings, IndianRupee, AlertCircle, CheckCircle, Shield, Plus, X } from 'lucide-react'
 import { useEffect, useState, useCallback, useRef } from 'react'
 
 export default function AdminReferralIncomeSettings() {
@@ -131,7 +131,7 @@ export default function AdminReferralIncomeSettings() {
   return (
     <div>
       <h1 className="text-3xl font-bold mb-8 flex items-center gap-2">
-        <DollarSign className="text-primary" size={32} />
+        <IndianRupee className="text-primary" size={32} />
         Referral Income Settings
       </h1>
 
@@ -188,7 +188,7 @@ export default function AdminReferralIncomeSettings() {
         {enableReferralIncomeGlobal && enableInvestorReferralIncome && (
           <div className="card">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <DollarSign className="text-primary" size={24} />
+              <IndianRupee className="text-primary" size={24} />
               Investor Referral Income Configuration
             </h2>
             <div className="space-y-4">
@@ -283,7 +283,7 @@ export default function AdminReferralIncomeSettings() {
         {enableReferralIncomeGlobal && enableInvestorReferralIncome && (
           <div className="card">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <DollarSign className="text-primary" size={24} />
+              <IndianRupee className="text-primary" size={24} />
               Multi-Level Income Configuration
             </h2>
             <div className="space-y-4">
@@ -519,7 +519,7 @@ export default function AdminReferralIncomeSettings() {
       {/* Wallet Sync Section */}
       <div className="card mt-6">
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <DollarSign className="text-green-500" size={24} />
+          <IndianRupee className="text-green-500" size={24} />
           Sync Wallet Balances
         </h2>
         <p className="text-sm text-gray-400 mb-4">

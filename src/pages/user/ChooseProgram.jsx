@@ -5,7 +5,7 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { DollarSign, CheckCircle, AlertCircle } from 'lucide-react'
+import { IndianRupee, CheckCircle, AlertCircle } from 'lucide-react'
 import { formatCurrency } from '../../utils/helpers'
 
 export default function ChooseProgram() {
@@ -152,7 +152,7 @@ export default function ChooseProgram() {
                   <div className={`p-3 rounded-lg ${
                     selectedProgram === 'investor' ? 'bg-primary' : 'bg-gray-700'
                   }`}>
-                    <DollarSign size={24} className="text-white" />
+                    <IndianRupee size={24} className="text-white" />
                   </div>
                   <div>
                     <h2 className="text-xl font-bold">Investor Program</h2>

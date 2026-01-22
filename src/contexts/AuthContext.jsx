@@ -9,7 +9,7 @@ import {
   sendEmailVerification,
   updateProfile
 } from 'firebase/auth'
-import { doc, getDoc, setDoc, updateDoc, addDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc, addDoc, serverTimestamp, collection, query, where, getDocs, limit } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { auth, db, functions } from '../config/firebase'
 import toast from 'react-hot-toast'
@@ -98,8 +98,36 @@ export function AuthProvider({ children }) {
     try {
       let email = identifier
       
+      // Check if identifier is a Mobile Number (10 digits, no @ symbol)
+      if (!identifier.includes('@') && /^\d{10}$/.test(identifier.trim())) {
+        const mobile = identifier.trim()
+        
+        // Lookup user by mobile number
+        const usersQuery = query(
+          collection(db, 'users'),
+          where('phone', '==', mobile),
+          limit(1)
+        )
+        
+        const usersSnapshot = await getDocs(usersQuery)
+        
+        if (usersSnapshot.empty) {
+          // Prevent enumeration - show generic error
+          throw new Error('Invalid credentials')
+        }
+        
+        const userDoc = usersSnapshot.docs[0]
+        const userData = userDoc.data()
+        
+        // Get email from user document
+        email = userData.email
+        
+        if (!email) {
+          throw new Error('Invalid credentials')
+        }
+      }
       // Check if identifier is a User ID (starts with MTN)
-      if (!identifier.includes('@') && identifier.toUpperCase().startsWith('MTN')) {
+      else if (!identifier.includes('@') && identifier.toUpperCase().startsWith('MTN')) {
         // Normalize User ID
         const userId = identifier.trim().toUpperCase()
         
@@ -137,9 +165,21 @@ export function AuthProvider({ children }) {
       
       // Login with email and password
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      
+      // For migrated users, skip email verification check
+      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid))
+      if (userDoc.exists()) {
+        const userData = userDoc.data()
+        // If user is migrated and email is verified in Firestore, update Firebase Auth
+        if (userData.isMigrated && userData.emailVerified && !userCredential.user.emailVerified) {
+          // Email verification is already set in Firestore, so we allow login
+          // Firebase Auth emailVerified will be true since we set it during migration
+        }
+      }
+      
       return userCredential.user
     } catch (error) {
-      // Prevent enumeration for User ID lookups
+      // Prevent enumeration for User ID/Mobile lookups
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
         throw new Error('Invalid credentials')
       }

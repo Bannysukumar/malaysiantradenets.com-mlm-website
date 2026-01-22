@@ -7,8 +7,9 @@ export function generateRefCode() {
   return result
 }
 
-export function formatCurrency(amount, currency = 'USD') {
-  return new Intl.NumberFormat('en-US', {
+export function formatCurrency(amount, currency = 'INR') {
+  const locale = currency === 'INR' ? 'en-IN' : 'en-US'
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
   }).format(amount)
