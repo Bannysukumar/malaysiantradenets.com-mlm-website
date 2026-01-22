@@ -1,15 +1,19 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useFirestore } from '../../hooks/useFirestore'
 import { doc, setDoc } from 'firebase/firestore'
-import { db } from '../../config/firebase'
+import { db, auth } from '../../config/firebase'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
-import { Settings as SettingsIcon, Shield, IndianRupee, Search, CheckCircle2 } from 'lucide-react'
+import { Settings as SettingsIcon, Shield, IndianRupee, Search, CheckCircle2, Lock } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
+import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
 
 export default function AdminSettings() {
+  const { user, userData, isSuperAdmin } = useAuth()
   const { data: settings, loading: settingsLoading } = useFirestore(doc(db, 'settings', 'main'))
   const { data: adminConfig, loading: configLoading } = useFirestore(doc(db, 'adminConfig', 'verification'))
   const loading = settingsLoading || configLoading
+  const [changingPassword, setChangingPassword] = useState(false)
   
   const { register, handleSubmit, reset } = useForm({
     defaultValues: {
@@ -21,6 +25,14 @@ export default function AdminSettings() {
       enableWalletCrediting: false,
       seoTitle: '',
       seoDescription: '',
+    },
+  })
+
+  const passwordForm = useForm({
+    defaultValues: {
+      currentPassword: '',
+      newPassword: '',
+      confirmNewPassword: '',
     },
   })
 
@@ -42,6 +54,12 @@ export default function AdminSettings() {
   }, [settings, adminConfig, loading, reset])
 
   const onSubmit = async (data) => {
+    // Only superAdmin can update system settings
+    if (!isSuperAdmin) {
+      toast.error('Only Super Admin can update system settings')
+      return
+    }
+
     try {
       // Update settings
       await setDoc(doc(db, 'settings', 'main'), {
@@ -67,6 +85,46 @@ export default function AdminSettings() {
     }
   }
 
+  const onChangePassword = async (data) => {
+    if (!user) {
+      toast.error('You must be logged in to change password')
+      return
+    }
+
+    if (data.newPassword !== data.confirmNewPassword) {
+      toast.error('Passwords do not match')
+      return
+    }
+
+    if (data.newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters')
+      return
+    }
+
+    setChangingPassword(true)
+    try {
+      // Re-authenticate user
+      const credential = EmailAuthProvider.credential(user.email, data.currentPassword)
+      await reauthenticateWithCredential(user, credential)
+
+      // Update password
+      await updatePassword(user, data.newPassword)
+      toast.success('Password changed successfully')
+      passwordForm.reset()
+    } catch (error) {
+      console.error('Password change error:', error)
+      if (error.code === 'auth/wrong-password') {
+        toast.error('Current password is incorrect')
+      } else if (error.code === 'auth/weak-password') {
+        toast.error('Password is too weak. Please use a stronger password')
+      } else {
+        toast.error(error.message || 'Error changing password')
+      }
+    } finally {
+      setChangingPassword(false)
+    }
+  }
+
   if (loading) {
     return <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
   }
@@ -78,7 +136,9 @@ export default function AdminSettings() {
         Settings
       </h1>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      {/* System Settings - Only for Super Admin */}
+      {isSuperAdmin && (
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className="card">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <Shield className="text-primary" size={24} />
@@ -194,6 +254,69 @@ export default function AdminSettings() {
           Save Settings
         </button>
       </form>
+      )}
+
+      {/* Change Password Section - Available for all Admins */}
+      <div className="card mt-6">
+        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+          <Lock className="text-primary" size={24} />
+          Change Password
+        </h2>
+        <form onSubmit={passwordForm.handleSubmit(onChangePassword)} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Current Password <span className="text-red-500">*</span></label>
+            <input
+              type="password"
+              {...passwordForm.register('currentPassword', { required: 'Current password is required' })}
+              className="input-field"
+              placeholder="Enter current password"
+            />
+            {passwordForm.formState.errors.currentPassword && (
+              <p className="text-red-500 text-sm mt-1">{passwordForm.formState.errors.currentPassword.message}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">New Password <span className="text-red-500">*</span></label>
+            <input
+              type="password"
+              {...passwordForm.register('newPassword', { 
+                required: 'New password is required',
+                minLength: { value: 8, message: 'Password must be at least 8 characters' }
+              })}
+              className="input-field"
+              placeholder="Enter new password"
+            />
+            {passwordForm.formState.errors.newPassword && (
+              <p className="text-red-500 text-sm mt-1">{passwordForm.formState.errors.newPassword.message}</p>
+            )}
+            <p className="text-gray-400 text-xs mt-1">
+              Must be at least 8 characters with 1 uppercase and 1 number
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Confirm New Password <span className="text-red-500">*</span></label>
+            <input
+              type="password"
+              {...passwordForm.register('confirmNewPassword', { required: 'Please confirm new password' })}
+              className="input-field"
+              placeholder="Re-enter new password"
+            />
+            {passwordForm.formState.errors.confirmNewPassword && (
+              <p className="text-red-500 text-sm mt-1">{passwordForm.formState.errors.confirmNewPassword.message}</p>
+            )}
+          </div>
+
+          <button 
+            type="submit" 
+            className="btn-primary"
+            disabled={changingPassword}
+          >
+            {changingPassword ? 'Changing Password...' : 'Change Password'}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }

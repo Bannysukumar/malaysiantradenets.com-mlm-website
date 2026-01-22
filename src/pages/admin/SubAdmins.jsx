@@ -1,9 +1,11 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useCollection } from '../../hooks/useFirestore'
 import { doc, updateDoc, setDoc, collection } from 'firebase/firestore'
-import { db } from '../../config/firebase'
+import { db, functions } from '../../config/firebase'
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
+import { httpsCallable } from 'firebase/functions'
 import toast from 'react-hot-toast'
+import { useForm } from 'react-hook-form'
 import { 
   Users, Search, Plus, Download, UserCheck, UserX, 
   Save, Lock, Ban, Eye, Check, X, ChevronDown, ChevronRight,
@@ -231,6 +233,15 @@ function SubAdminDetails({ subAdmin, activeTab, setActiveTab, onUpdate }) {
   const [permissions, setPermissions] = useState(subAdmin.permissions || {})
   const [expandedGroups, setExpandedGroups] = useState({})
   const [saving, setSaving] = useState(false)
+  const [showChangePassword, setShowChangePassword] = useState(false)
+  const [changingPassword, setChangingPassword] = useState(false)
+  
+  const passwordForm = useForm({
+    defaultValues: {
+      newPassword: '',
+      confirmPassword: '',
+    },
+  })
 
   // Sync form data when subAdmin changes
   useEffect(() => {
@@ -316,6 +327,43 @@ function SubAdminDetails({ subAdmin, activeTab, setActiveTab, onUpdate }) {
     } catch (error) {
       console.error('Error sending password reset:', error)
       toast.error('Failed to send password reset email')
+    }
+  }
+
+  const handleChangePassword = async (data) => {
+    if (!subAdmin) {
+      toast.error('No admin selected')
+      return
+    }
+
+    if (data.newPassword !== data.confirmPassword) {
+      toast.error('Passwords do not match')
+      return
+    }
+
+    if (data.newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters')
+      return
+    }
+
+    setChangingPassword(true)
+    try {
+      const changeAdminPassword = httpsCallable(functions, 'changeAdminPassword')
+      const result = await changeAdminPassword({
+        targetUserId: subAdmin.uid || subAdmin.id,
+        newPassword: data.newPassword
+      })
+
+      if (result.data.success) {
+        toast.success('Password changed successfully')
+        passwordForm.reset()
+        setShowChangePassword(false)
+      }
+    } catch (error) {
+      console.error('Error changing password:', error)
+      toast.error(error.message || 'Failed to change password')
+    } finally {
+      setChangingPassword(false)
     }
   }
 
@@ -427,22 +475,93 @@ function SubAdminDetails({ subAdmin, activeTab, setActiveTab, onUpdate }) {
             </div>
           )}
 
-          <div className="flex gap-2 pt-4 border-t border-gray-700">
-            <button
-              onClick={handleResetPassword}
-              className="btn-secondary flex items-center gap-2"
-            >
-              <Lock size={16} />
-              Reset Password
-            </button>
-            <button
-              onClick={handleSaveProfile}
-              className="btn-primary flex items-center gap-2"
-              disabled={saving}
-            >
-              <Save size={16} />
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
+          <div className="pt-4 border-t border-gray-700">
+            <div className="mb-4">
+              <button
+                onClick={() => setShowChangePassword(!showChangePassword)}
+                className="btn-secondary flex items-center gap-2 w-full md:w-auto"
+              >
+                <Lock size={16} />
+                {showChangePassword ? 'Cancel Password Change' : 'Change Password'}
+              </button>
+            </div>
+
+            {showChangePassword && (
+              <div className="card bg-dark-lighter mb-4">
+                <h3 className="text-lg font-semibold mb-4">Change Password</h3>
+                <form onSubmit={passwordForm.handleSubmit(handleChangePassword)} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">New Password <span className="text-red-500">*</span></label>
+                    <input
+                      type="password"
+                      {...passwordForm.register('newPassword', { 
+                        required: 'New password is required',
+                        minLength: { value: 8, message: 'Password must be at least 8 characters' }
+                      })}
+                      className="input-field"
+                      placeholder="Enter new password"
+                    />
+                    {passwordForm.formState.errors.newPassword && (
+                      <p className="text-red-500 text-sm mt-1">{passwordForm.formState.errors.newPassword.message}</p>
+                    )}
+                    <p className="text-gray-400 text-xs mt-1">
+                      Must be at least 8 characters
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Confirm New Password <span className="text-red-500">*</span></label>
+                    <input
+                      type="password"
+                      {...passwordForm.register('confirmPassword', { required: 'Please confirm new password' })}
+                      className="input-field"
+                      placeholder="Re-enter new password"
+                    />
+                    {passwordForm.formState.errors.confirmPassword && (
+                      <p className="text-red-500 text-sm mt-1">{passwordForm.formState.errors.confirmPassword.message}</p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button 
+                      type="submit" 
+                      className="btn-primary"
+                      disabled={changingPassword}
+                    >
+                      {changingPassword ? 'Changing...' : 'Change Password'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowChangePassword(false)
+                        passwordForm.reset()
+                      }}
+                      className="btn-secondary"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleResetPassword}
+                className="btn-secondary flex items-center gap-2"
+              >
+                <Lock size={16} />
+                Send Reset Email
+              </button>
+              <button
+                onClick={handleSaveProfile}
+                className="btn-primary flex items-center gap-2"
+                disabled={saving}
+              >
+                <Save size={16} />
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
           </div>
         </div>
       )}

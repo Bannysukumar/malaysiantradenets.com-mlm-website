@@ -99,7 +99,7 @@ export default function AdminLayout() {
     { path: '/admin/payout-settings', icon: Calendar, label: 'Payout Settings', permission: null, superAdminOnly: true },
     { path: '/admin/feature-settings', icon: Settings, label: 'Feature Settings', permission: null, superAdminOnly: true },
     { path: '/admin/user-menu-settings', icon: Settings, label: 'User Menu Settings', permission: null, superAdminOnly: true },
-    { path: '/admin/settings', icon: Settings, label: 'Settings', permission: null, superAdminOnly: true },
+    { path: '/admin/settings', icon: Settings, label: 'Settings', permission: null, superAdminOnly: false },
     { path: '/admin/sub-admins', icon: Shield, label: 'Sub Admins', permission: null, superAdminOnly: true },
     { path: '/admin/migration', icon: Database, label: 'Migration', permission: 'migration', superAdminOnly: false },
   ]

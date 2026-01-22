@@ -4367,6 +4367,75 @@ exports.cancelPayout = functions.https.onCall(async (data, context) => {
 });
 
 // Delete User and All Related Data (Admin only)
+// Change admin/sub-admin password (superAdmin only)
+exports.changeAdminPassword = functions.https.onCall(async (data, context) => {
+  // Check authentication
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { targetUserId, newPassword } = data;
+
+  if (!targetUserId || !newPassword) {
+    throw new functions.https.HttpsError('invalid-argument', 'targetUserId and newPassword are required');
+  }
+
+  if (newPassword.length < 8) {
+    throw new functions.https.HttpsError('invalid-argument', 'Password must be at least 8 characters');
+  }
+
+  try {
+    // Get current user's data
+    const currentUserDoc = await db.collection('users').doc(context.auth.uid).get();
+    if (!currentUserDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Current user not found');
+    }
+
+    const currentUserData = currentUserDoc.data();
+    
+    // Only superAdmin can change passwords
+    if (currentUserData.role !== 'superAdmin') {
+      throw new functions.https.HttpsError('permission-denied', 'Only superAdmin can change admin passwords');
+    }
+
+    // Get target user's data
+    const targetUserDoc = await db.collection('users').doc(targetUserId).get();
+    if (!targetUserDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Target user not found');
+    }
+
+    const targetUserData = targetUserDoc.data();
+    
+    // Only allow changing passwords for admin or subAdmin roles
+    if (targetUserData.role !== 'admin' && targetUserData.role !== 'subAdmin') {
+      throw new functions.https.HttpsError('permission-denied', 'Can only change passwords for admin or subAdmin users');
+    }
+
+    // Update password using Admin SDK
+    await admin.auth().updateUser(targetUserId, {
+      password: newPassword
+    });
+
+    // Log the password change
+    await db.collection('adminLogs').add({
+      action: 'change_admin_password',
+      performedBy: context.auth.uid,
+      performedByName: currentUserData.name || currentUserData.email,
+      targetUserId: targetUserId,
+      targetUserName: targetUserData.name || targetUserData.email,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success: true, message: 'Password changed successfully' };
+  } catch (error) {
+    console.error('Error changing admin password:', error);
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError('internal', 'Error changing password: ' + error.message);
+  }
+});
+
 exports.deleteUser = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
